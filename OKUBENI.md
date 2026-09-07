@@ -1,3 +1,5 @@
+| `js/depo.js` | Kalici onbellek (IndexedDB): inen bloklar diske yazilir, sayfa yenilenince ag'a cikilmaz |
+| `js/proj.js` | Koordinat donusumleri: enlem/boylam ↔ metre ↔ izometrik piksel, kamera. Ayrica `Nefes`: uzun isi karelere bolme |
 # Kurye Haritasi — izometrik altyapi
 
 Gercek OpenStreetMap verisi + gercek yukseklikle izometrik (NFS mini-map tarzi)

@@ -334,7 +334,10 @@ const Karolar = {
   durumMetni() {
     if (this.cokUzak) return 'Cok uzaktasin — yakinlas';
     const hazir = this.hazirKarolar().length;
-    const s = Overpass.DETAY[this.seviye].ad + ' · ' + hazir + ' karo';
+    let s = Overpass.DETAY[this.seviye].ad + ' · ' + hazir + ' karo';
+    /* Kalici onbellekten kac blok geldigini goster: "ag'a cikmadi" bilgisi
+       hem kullaniciya hem hata ararken ise yariyor. */
+    if (Depo.okundu) s += ' · ' + Depo.okundu + ' onbellekten';
     if (this.yukleniyor) return s + ' · iniyor…';
     if (this.bekleme && this.sonHata) {
       const kalan = Math.max(0, Math.round((this.tekrarZamani - performance.now()) / 1000));

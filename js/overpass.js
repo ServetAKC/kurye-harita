@@ -228,6 +228,16 @@ const Overpass = {
     const sorgu = this.sorguYaz(kutu, detayAdi, poiAcik);
     let sonHata = null;
 
+    /* Once KALICI ONBELLEK: ayni sorgu daha once indiyse ag'a hic cikma.
+       Sayfa yenilendiginde harita boylece aninda geliyor. Kayit yoksa,
+       bayatsa ya da IndexedDB kullanilamiyorsa sessizce ag'a duseriz. */
+    const dAnahtar = Depo.anahtarla(sorgu);
+    const saklanan = await Depo.oku(dAnahtar);
+    if (saklanan) {
+      try { return JSON.parse(saklanan); }
+      catch (e) { /* bozuk kayit: ag'dan indirilecek */ }
+    }
+
     // Vekil varsa once o denenir: tarayici engelini tamamen atlatir.
     const vekil = await this.vekilBul();
     /* Vekil varsa SADECE o kullanilir. Vekil zaten kendi icinde bes aynayi
@@ -257,6 +267,12 @@ const Overpass = {
         if (!cevap.ok) throw new Error('HTTP ' + cevap.status);
         const json = await cevap.json();
         this.sadelestir(json);
+        /* Kalici onbellege yaz. Beklenmiyor: cagiran taraf sonucu zaten
+           elinde tutuyor. Once bir nefes veriliyor ki JSON.stringify
+           maliyeti karo gorunur olduktan SONRA odensin. Sadelestirilmis
+           hali saklaniyor (hamdan belirgin kucuk) — okurken tekrar
+           sadelestirmeye gerek kalmiyor. */
+        Nefes.ver().then(function () { Depo.yaz(dAnahtar, JSON.stringify(json)); });
         // Calisan aynayi basa al (vekil listede degil, o hep basta).
         const yeri = this.SUNUCULAR.indexOf(sunucu);
         if (yeri > 0) {
