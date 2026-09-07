@@ -1427,7 +1427,7 @@ const Cizer = {
      bunu vermez, egik kamerada ok yanlis yone kayar).
      Govde zemine degil, kucuk bir yuksekliğe cizilip altina golge
      konuyor — arazinin uzerinde durdugu boylece belli oluyor. */
-  kuryeCiz(c, x, y, z, aci) {
+  kuryeCiz(c, x, y, z, aci, paket) {
     const BOY = 9, EN = 5.5;                 // metre
     const ileri = { x: Math.cos(aci), y: Math.sin(aci) };
     const yan = { x: -ileri.y, y: ileri.x };
@@ -1473,6 +1473,26 @@ const Cizer = {
     c.strokeStyle = 'rgba(0,0,0,0.45)';
     c.lineWidth = 1.4;
     c.stroke();
+
+    /* Elindeki paket sayisi: kapasite kisiti gorunur olsun diye govdenin
+       ustunde kucuk bir rozet. 0 ise (subeye donuyor) yazilmiyor. */
+    if (paket > 0) {
+      const r = Kamera.ekrana(x, y, z + YUKSEK + 9);
+      c.beginPath();
+      c.arc(r.sx, r.sy, 8, 0, Math.PI * 2);
+      c.fillStyle = 'rgba(8,11,16,0.85)';
+      c.fill();
+      c.strokeStyle = RENK.kurye;
+      c.lineWidth = 1.4;
+      c.stroke();
+      c.fillStyle = '#e6edf5';
+      c.font = 'bold 11px system-ui, sans-serif';
+      c.textAlign = 'center';
+      c.textBaseline = 'middle';
+      c.fillText(String(paket), r.sx, r.sy + 0.5);
+      c.textAlign = 'start';
+      c.textBaseline = 'alphabetic';
+    }
   },
 
   /* Rota uzerine gidis yonu oklari. Ok METRE dunyasinda kuruluyor

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kurye Haritasi — Izometrik</title>
-<link rel="stylesheet" href="css/style.css?s=20260908t">
+<link rel="stylesheet" href="css/style.css?s=20260908v">
 </head>
 <body>
 
@@ -57,7 +57,11 @@
       <button data-mod="musteri">Musteri ekle</button>
     </div>
     <label class="onay"><input type="checkbox" id="tekYon" checked> Tek yon kurallarini uygula</label>
-    <label class="onay"><input type="checkbox" id="subeyeDon" checked> Tur sonunda subeye donsun</label>
+    <label class="satir">
+      <span>Kapasite</span>
+      <input type="number" id="kapasite" min="1" max="20" step="1" value="3">
+      <b class="deger">paket</b>
+    </label>
     <label class="satir">
       <span>Olcut</span>
       <select id="olcut">
@@ -104,13 +108,13 @@
   <div id="konum" class="konum"></div>
 </main>
 
-<script src="js/depo.js?s=20260908t"></script>
-<script src="js/proj.js?s=20260908t"></script>
-<script src="js/terrain.js?s=20260908t"></script>
-<script src="js/overpass.js?s=20260908t"></script>
-<script src="js/tiles.js?s=20260908t"></script>
-<script src="js/graph.js?s=20260908t"></script>
-<script src="js/render.js?s=20260908t"></script>
-<script src="js/main.js?s=20260908t"></script>
+<script src="js/depo.js?s=20260908v"></script>
+<script src="js/proj.js?s=20260908v"></script>
+<script src="js/terrain.js?s=20260908v"></script>
+<script src="js/overpass.js?s=20260908v"></script>
+<script src="js/tiles.js?s=20260908v"></script>
+<script src="js/graph.js?s=20260908v"></script>
+<script src="js/render.js?s=20260908v"></script>
+<script src="js/main.js?s=20260908v"></script>
 </body>
 </html>

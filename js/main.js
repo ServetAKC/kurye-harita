@@ -23,6 +23,7 @@ const Uyg = {
   musteriler: [],
   rotalar: [],
   teslimatSirasi: [],   // musteriler[] icindeki indekslerin ziyaret sirasi
+  bacakBilgi: [],       // her rota bacaginin hedefi: musteri mi, subeye donus mu
 
   kuryeIzle: false,
 
@@ -103,7 +104,11 @@ const Uyg = {
       if (!yol || yol.length < 2) { this.kuryeDurdur(); return false; }
 
       if (k.segIdx >= yol.length - 1) {
-        k.varis++;                          // bu musteriye varildi
+        /* Bacak hedefi musteri ise teslimat, sube ise yeniden yukleme.
+           Ayirt etmezsek subeye donusler de teslimat sayilirdi. */
+        const bilgi = this.bacakBilgi[k.rotaIdx];
+        if (!bilgi || bilgi.tip === 'musteri') k.varis++;
+        else k.paket = 0;                   // subede yeniden yuklendi
         if (k.rotaIdx + 1 >= this.rotalar.length) {
           this.kuryeKonumla();              // son noktada dur
           this.kuryeDurdur('Kurye ' + k.varis + ' teslimati tamamladi.');
@@ -351,46 +356,92 @@ const Uyg = {
     return sira;
   },
 
+  /* Bir SEFERIN ic sirasini iyilestir (sube -> ... -> sube).
+     teslimatSirasiBul butun musterileri tek tur sayiyor; kapasite
+     bolunmesinden sonra her sefer kendi icinde ayrica duzeltilmeli,
+     cunku sefer artik subeye donuyor. */
+  seferIciDuzelt(sefer) {
+    const M = this.musteriler;
+    if (sefer.length < 3) return sefer;
+    const uzunluk = (s) => {
+      let t = this._kusUcusu(this.sube, M[s[0]]);
+      for (let i = 0; i + 1 < s.length; i++) t += this._kusUcusu(M[s[i]], M[s[i + 1]]);
+      return t + this._kusUcusu(M[s[s.length - 1]], this.sube);
+    };
+    let en = uzunluk(sefer), tur = 0, iyilesti = true;
+    while (iyilesti && tur++ < 20) {
+      iyilesti = false;
+      for (let i = 0; i < sefer.length - 1 && !iyilesti; i++) {
+        for (let j = i + 1; j < sefer.length; j++) {
+          const aday = sefer.slice(0, i)
+            .concat(sefer.slice(i, j + 1).reverse(), sefer.slice(j + 1));
+          const u = uzunluk(aday);
+          if (u < en - 1e-6) { sefer = aday; en = u; iyilesti = true; break; }
+        }
+      }
+    }
+    return sefer;
+  },
+
   testRota() {
     if (!this.sube) { this.durum('Once "Sube koy" ile bir sube isaretle.', 'uyari'); return; }
     if (!this.musteriler.length) { this.durum('Once "Musteri ekle" ile musteri koy.', 'uyari'); return; }
     const ist = this.grafigiHazirla();
     const olcut = document.getElementById('olcut').value;
-    const donusKutu = document.getElementById('subeyeDon');
-    const donus = donusKutu ? donusKutu.checked : true;
+    const kapK = document.getElementById('kapasite');
+    const kapasite = Math.max(1, parseInt(kapK ? kapK.value : 3, 10) || 3);
     const t0 = performance.now();
 
     this.rotalar = [];
+    this.bacakBilgi = [];
     /* Yeni rota cizilince kurye basa donsun: eski rotanin ortasinda kalmis
        bir kurye yeni rotada anlamsiz bir yerde duruyor. */
     this.kurye.aktif = false; this.kurye.rotaIdx = 0;
     this.kurye.segIdx = 0; this.kurye.t = 0; this.kurye.varis = 0;
 
-    this.teslimatSirasi = this.teslimatSirasiBul(donus);
-
-    // duraklar: sube -> musteriler (sirayla) -> (istege bagli) sube
-    const durak = [this.sube];
-    for (const i of this.teslimatSirasi) durak.push(this.musteriler[i]);
-    if (donus) durak.push(this.sube);
+    /* Once butun musteriler icin makul bir sira, sonra kapasiteye gore
+       SEFERLERE bolme. Sira cografi oldugu icin ardisik musteriler zaten
+       birbirine yakin dusuyor; her sefer kendi icinde ayrica duzeltiliyor. */
+    const genelSira = this.teslimatSirasiBul(true);
+    const seferler = [];
+    for (let i = 0; i < genelSira.length; i += kapasite) {
+      seferler.push(this.seferIciDuzelt(genelSira.slice(i, i + kapasite)));
+    }
+    this.teslimatSirasi = [];
+    for (const s of seferler) for (const i of s) this.teslimatSirasi.push(i);
 
     let toplam = 0, basarisiz = 0;
-    for (let i = 0; i + 1 < durak.length; i++) {
-      const r = Grafik.rotaBul(durak[i].dugumId, durak[i + 1].dugumId, olcut);
-      if (!r) { basarisiz++; continue; }
-      this.rotalar.push(Grafik.rotaNoktalari(r.yol));
-      toplam += r.maliyet;
+    for (let s = 0; s < seferler.length; s++) {
+      const sefer = seferler[s];
+      const durak = [this.sube];
+      for (const i of sefer) durak.push(this.musteriler[i]);
+      durak.push(this.sube);                       // kapasite bitti, yeniden yukle
+
+      for (let i = 0; i + 1 < durak.length; i++) {
+        const r = Grafik.rotaBul(durak[i].dugumId, durak[i + 1].dugumId, olcut);
+        if (!r) { basarisiz++; continue; }
+        this.rotalar.push(Grafik.rotaNoktalari(r.yol));
+        /* Bacak hedefi: son bacak subeye donus, digerleri musteri.
+           Kurye varis sayarken buna bakiyor — yoksa subeye donuslerı de
+           teslimat sayardi. */
+        const sonBacak = (i + 1 === durak.length - 1);
+        this.bacakBilgi.push(sonBacak
+          ? { tip: 'sube', sefer: s }
+          : { tip: 'musteri', sefer: s, kalanPaket: sefer.length - i - 1 });
+        toplam += r.maliyet;
+      }
     }
 
     const ms = performance.now() - t0;
     const birim = olcut === 'sure' ? (Math.round(toplam / 60) + ' dk') : (Math.round(toplam) + ' m');
-    this.durum(this.musteriler.length + ' teslimatlik tur · ' + birim + '  ·  ' +
-               ist.dugum + ' dugumluk grafikte ' + ms.toFixed(0) + ' ms' +
+    this.durum(this.musteriler.length + ' teslimat · ' + seferler.length + ' sefer (kapasite ' +
+               kapasite + ') · ' + birim + '  ·  ' + ist.dugum + ' dugumluk grafikte ' +
+               ms.toFixed(0) + ' ms' +
                (basarisiz ? ('  ·  ' + basarisiz + ' bacakta yol yok') : ''),
                basarisiz ? 'uyari' : 'iyi');
   },
-
   temizle() {
-    this.musteriler = []; this.rotalar = []; this.teslimatSirasi = [];
+    this.musteriler = []; this.rotalar = []; this.teslimatSirasi = []; this.bacakBilgi = [];
     this.kurye.aktif = false; this.kurye.varis = 0;
     this.durum('Musteriler ve rotalar silindi.');
   },
@@ -661,8 +712,13 @@ const Uyg = {
         Cizer.isaretciCiz(c, k.x, k.y, k.z, RENK.sube, 'SUBE', 34);
       }
       if (this.kurye.aktif || this.kurye.varis) {
+        /* Elindeki paket: su an gidilen bacagin hedefi musteriyse, o
+           teslimat dahil kalan paket sayisi. Subeye donerken 0. */
+        const bilgi = this.bacakBilgi[this.kurye.rotaIdx];
+        const paket = (bilgi && bilgi.tip === 'musteri')
+          ? (bilgi.kalanPaket || 0) + 1 : 0;
         Cizer.kuryeCiz(c, this.kurye.x, this.kurye.y,
-                       Arazi.cz(this.kurye.z || 0), this.kurye.aci);
+                       Arazi.cz(this.kurye.z || 0), this.kurye.aci, paket);
       }
       if (this.miniMap) this.miniMapMaskesi(c);
     });
