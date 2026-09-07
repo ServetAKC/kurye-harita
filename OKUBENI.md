@@ -1,4 +1,5 @@
 | `js/depo.js` | Kalici onbellek (IndexedDB): inen bloklar diske yazilir, sayfa yenilenince ag'a cikilmaz |
+| `js/depo.js` | Kalici onbellek (IndexedDB): inen bloklar diske yazilir, sayfa yenilenince aga cikilmaz |
 | `js/proj.js` | Koordinat donusumleri: enlem/boylam ↔ metre ↔ izometrik piksel, kamera. Ayrica `Nefes`: uzun isi karelere bolme |
 # Kurye Haritasi — izometrik altyapi
 
@@ -26,7 +27,8 @@ Sonra sadece gez.
 
 | Dosya | Isi |
 |---|---|
-| `js/proj.js` | Koordinat donusumleri: enlem/boylam ↔ metre ↔ izometrik piksel, kamera |
+| `js/depo.js` | Kalici onbellek (IndexedDB): inen bloklar diske yazilir, sayfa yenilenince aga cikilmaz |
+| `js/proj.js` | Koordinat donusumleri: enlem/boylam ↔ metre ↔ izometrik piksel, kamera. Ayrica `Nefes`: uzun isi karelere bolme |
 | `js/terrain.js` | Yukseklik karolari: indirme, cozme, ornekleme, gri arazi paleti |
 | `js/overpass.js` | OSM sorgusu ve ayristirma; detay seviyeleri; durak (POI) tanimlari |
 | `js/tiles.js` | **Karo yoneticisi** — ne yuklenecek, ne atilacak, hangi detayda |
