@@ -503,9 +503,9 @@ const Cizer = {
     const t = this.sekilleriTopla();
     const kaba = this.kabaMod;
 
-    /* Asama asama sure: neyin pahali oldugunu tahmin etmek yerine olcuyoruz.
-       (?ss= teshisiyle disari veriliyor; normal kullanimda sadece birkac
-       performance.now cagrisi, olculebilir bir maliyeti yok.) */
+    /* Asama asama sure. Bir yavaslikta neyin pahali oldugunu tahmin etmek
+       yerine konsoldan `Cizer.sureler` ile bakilabilir (arazi/yollar/binalar
+       ayri ayri, ms). Maliyeti birkac performance.now cagrisi. */
     const s0 = performance.now();
     if (this.katman.arazi && Arazi.hazir) this.araziCiz(c, kaba);
     const s1 = performance.now();
@@ -659,7 +659,9 @@ const Cizer = {
     const basamak = Math.pow(10, Math.floor(Math.log10(adim))) / 2;
     adim = Math.max(enInce, Math.round(adim / basamak) * basamak);
 
-    // teshis: son cizimin sayilari (bkz. ?ss= bloklari, main.js sonu)
+    /* Son arazi ciziminin sayilari — konsoldan `Cizer._tes` ile bakilabilir:
+       izgara adimi, yukseklik telafisi (kay/pay), bolge boyu, hucre ve
+       fill sayisi. Arazi cizimin en pahali kalemi oldugu icin duruyor. */
     this._tes = { adim: adim, kay: Math.round(kay), pay: Math.round(payAlt), yYerel: Math.round(yYerel),
                   genM: Math.round(maxx - minx), yukM: Math.round(maxy - miny) };
     const iz = Arazi.izgaraIste(minx, miny, maxx, maxy, adim);
