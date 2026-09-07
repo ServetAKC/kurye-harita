@@ -404,7 +404,7 @@ const Uyg = {
     };
     window.onmousemove = (e) => {
       const r = t.getBoundingClientRect();
-      const w = Kamera.dunyaya(e.clientX - r.left, e.clientY - r.top);
+      const w = Kamera.dunyayaArazi(e.clientX - r.left, e.clientY - r.top);
       this.imlecYaz(w);
       if (!this.surukluyor) return;
       const dx = e.clientX - this.sonFare.x, dy = e.clientY - this.sonFare.y;
@@ -459,7 +459,7 @@ const Uyg = {
     const ist = this.grafigiHazirla();
     if (!ist || !ist.dugum) { this.durum('Once biraz bekle, yol verisi insin.', 'uyari'); return; }
     const r = document.getElementById('tuval').getBoundingClientRect();
-    const w = Kamera.dunyaya(e.clientX - r.left, e.clientY - r.top);
+    const w = Kamera.dunyayaArazi(e.clientX - r.left, e.clientY - r.top);
     const yk = Grafik.enYakinDugum(w.x, w.y);
     if (!yk) return;
     const sinir = Math.max(200, 60 / Math.max(Kamera.olcek, 0.005));

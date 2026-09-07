@@ -171,6 +171,36 @@ const Kamera = {
     return { x: rx * c - ry * s, y: rx * s + ry * c };
   },
 
+
+  /* Ekran pikseli -> ARAZI YUZEYINDEKI metre noktasi.
+     ------------------------------------------------------------
+     dunyaya() z=0 duzleminde calisir. Arazi ise yuksekligi kadar
+     ekranda YUKARI kaymis durumda; bu yuzden tepelik bir yere
+     tiklayinca z=0 cozumu gercekte daha ILERIDEKI (ekranda yukarida
+     kalan) bir noktayi veriyordu — sube/musteri isaretleri tiklanan
+     yerden baya uzaga, yukari dusuyordu.
+
+     Kapali cozumu yok cunku yukseklik konuma bagli. Sabit noktali
+     yineleme kullaniyoruz: z=0 cozumunden basla, oradaki yuksekligi
+     olc, o duzlemde tekrar coz. Birkac adimda oturuyor (arazi ekran
+     olceginde yavas degistigi icin yakinsar; dik yamacta daha cok adim
+     gerekiyor, o yuzden 12 adim ve 15 cm esik olculerek secildi). Yakinsamazsa
+     son tahmin dondurulur — eski davranistan yine de iyi.
+
+     sy'ye z*IZO_Z*olcek eklemek "z duzleminde coz" demek: ekrana()
+     icinde z yalnizca sy terimine giriyor. */
+  dunyayaArazi(sx, sy) {
+    let p = this.dunyaya(sx, sy);
+    if (typeof Arazi === 'undefined' || !Arazi.etkin || !Arazi.hazir) return p;
+    for (let i = 0; i < 12; i++) {
+      const cz = Arazi.cz(Arazi.metreYukseklik(p.x, p.y));
+      const y = this.dunyaya(sx, sy + cz * IZO_Z * this.olcek);
+      const fark = Math.abs(y.x - p.x) + Math.abs(y.y - p.y);
+      p = y;
+      if (fark < 0.15) break;         // 15 cm: isaret icin fazlasiyla yeterli
+    }
+    return p;
+  },
   /* Verilen metre dikdortgeni ekrana tam sigacak olcegi bul ve ortala.
      araziYukseklik: abartma uygulanmis en yuksek nokta — arazi yukseldiginde
      harita ekranda yukari dogru buyudugu icin dikeyde pay birakiyoruz. */
