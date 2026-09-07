@@ -370,6 +370,35 @@ const Ayristirici = {
   /* Ham OSM JSON -> cizilebilir sekiller.
      Projeksiyon merkezini DEGISTIRMEZ; Proj'un o anki merkezini kullanir.
      (Karolar bagimsiz inip ayni dunya koordinat sisteminde bulusmali.) */
+  /* Ayristirmayi PARCALARA bolerek yapar — cikti ayristir() ile birebir ayni.
+     Buyuk bir blokta (olculdu: 5373 eleman) ayristirma tek seferde ~18 ms,
+     ustune JSON.parse ve yukseklik damgalama binince harita gorulur sekilde
+     donuyordu. Her parca arasinda tarayiciya kare cizme firsati veriliyor.
+     Ayristiricinin kendisine dokunulmuyor: elemanlar dilimlenip ayni
+     fonksiyon her dilim icin cagriliyor, sonuclar birlestiriliyor. */
+  PARCA: 700,
+
+  async ayristirBolerek(osm, ilerleme) {
+    const hepsi = osm.elements;
+    if (hepsi.length <= this.PARCA) return this.ayristir(osm, ilerleme);
+
+    const c = { yollar: [], binalar: [], alanlar: [], kiyi: [], poiler: [], poiSay: {} };
+    for (let i = 0; i < hepsi.length; i += this.PARCA) {
+      const s = this.ayristir({ elements: hepsi.slice(i, i + this.PARCA) });
+      for (const a of s.yollar)  c.yollar.push(a);
+      for (const a of s.binalar) c.binalar.push(a);
+      for (const a of s.alanlar) c.alanlar.push(a);
+      for (const a of s.kiyi)    c.kiyi.push(a);
+      for (const a of s.poiler)  c.poiler.push(a);
+      for (const k of Object.keys(s.poiSay)) c.poiSay[k] = (c.poiSay[k] || 0) + s.poiSay[k];
+      if (i + this.PARCA < hepsi.length) await Nefes.ver();
+    }
+    ilerleme && ilerleme('Ayristirildi: ' + c.yollar.length + ' yol, ' + c.binalar.length +
+      ' bina, ' + c.alanlar.length + ' alan, ' + c.kiyi.length + ' kiyi parcasi, ' +
+      c.poiler.length + ' durak');
+    return c;
+  },
+
   ayristir(osm, ilerleme) {
     const yollar = [], binalar = [], alanlar = [], kiyi = [], poiler = [];
 

@@ -1,4 +1,48 @@
 /* ============================================================
+   Nefes — uzun isi karelere bolmek icin
+   ------------------------------------------------------------
+   Bir blok inince yapilan is olculdu (3.57 MB, 5373 eleman):
+     JSON.parse  32 ms · sadelestir 18 ms · ayristir 18 ms
+   ustune yukseklik damgalama. Hepsi tek seferde yapilinca harita
+   o sure boyunca donuyordu.
+
+   Web Worker'a tasimak ilk akla gelen cozum ama olculdu: ayristirma
+   36 bin nokta nesnesi uretiyor ve bunlarin Worker'dan geri
+   kopyalanmasi (structured clone) 48 ms suruyor — 68 ms'lik isi
+   tasiyip 48 ms'ini geri odemek anlamsiz. (Gercek cozum noktalari
+   duz Float64Array'e cevirmek olurdu; render, graph ve ayristiricinin
+   tamamini etkileyen ayri bir is.)
+
+   Onun yerine isi boluyoruz: her N adimda bir tarayiciya kare cizme
+   firsati veriliyor. setTimeout(0) kullanilmiyor cunku tarayicilar
+   ona 4 ms taban koyuyor; MessageChannel gecikmesiz makro-gorev
+   veriyor, yani bolmenin kendi maliyeti yok denecek kadar az.
+   ============================================================ */
+const Nefes = {
+  _kanal: (typeof MessageChannel !== 'undefined') ? new MessageChannel() : null,
+  _kuyruk: [],
+  _kuruldu: false,
+
+  kur() {
+    if (this._kuruldu || !this._kanal) return;
+    this._kuruldu = true;
+    const k = this._kuyruk;
+    this._kanal.port1.onmessage = function () {
+      const f = k.shift();
+      if (f) f();
+    };
+  },
+
+  /* Bir sonraki makro-goreve birak: aradaki karede ekran cizilebilir. */
+  ver() {
+    if (!this._kanal) return Promise.resolve();
+    this.kur();
+    const k = this._kuyruk, p = this._kanal.port2;
+    return new Promise(function (coz) { k.push(coz); p.postMessage(0); });
+  }
+};
+
+/* ============================================================
    proj.js  —  Koordinat donusumleri
    ------------------------------------------------------------
    Uc ayri "dunya" var, sirayla birbirine cevriliyor:

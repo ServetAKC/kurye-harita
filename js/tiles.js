@@ -221,8 +221,11 @@ const Karolar = {
 
     try {
       const ham = await Overpass.indirKutu(kutu, seviye, this.poiAcik);
-      const blok = { sekil: Ayristirici.ayristir(ham), araziSurum: -1, zEnCok: 0 };
-      Cizer.blokHazirla(blok);
+      /* Bolunerek: buyuk bir blokta ayristirma + yukseklik damgalama tek
+         seferde yapilinca harita gorulur sekilde donuyordu. Ikisi de
+         parcalara ayrilip aralarinda tarayiciya kare firsati veriliyor. */
+      const blok = { sekil: await Ayristirici.ayristirBolerek(ham), araziSurum: -1, zEnCok: 0 };
+      await Cizer.blokHazirlaBolerek(blok);
 
       for (const a of anahtarlar) {
         const v = this.depo.get(a);

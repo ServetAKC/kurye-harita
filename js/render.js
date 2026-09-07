@@ -285,6 +285,21 @@ const Cizer = {
      Karo hazirligi: sekillerin sinir kutusu + yukseklik damgasi.
      Karo indigi anda ve arazi verisi degistiginde cagrilir.
      ------------------------------------------------------------ */
+  /* blokHazirla'nin bolunebilir surumu — cikti birebir ayni.
+     Yukseklik damgalama nokta basina bir arazi ornegi demek (olculdu:
+     buyuk blokta 36 bin nokta), yani blok inince hissedilen donmanin
+     buyuk kismi burada. Sekil kumeleri arasinda tarayiciya kare cizme
+     firsati veriliyor. */
+  async blokHazirlaBolerek(blok) {
+    const s = blok && blok.sekil;
+    if (!s) return;
+    for (const kume of [s.yollar, s.binalar, s.alanlar, s.kiyi]) {
+      for (const o of kume) for (const p of o.nokta) p.z = Arazi.latLonYukseklik(p.lat, p.lon);
+      await Nefes.ver();
+    }
+    this._blokHazirlaKalan(blok, s);
+  },
+
   blokHazirla(blok) {
     const s = blok && blok.sekil;
     if (!s) return;
@@ -292,6 +307,11 @@ const Cizer = {
     for (const kume of [s.yollar, s.binalar, s.alanlar, s.kiyi]) {
       for (const o of kume) for (const p of o.nokta) p.z = Arazi.latLonYukseklik(p.lat, p.lon);
     }
+    this._blokHazirlaKalan(blok, s);
+  },
+
+  /* Damgalamadan sonraki kisim — her iki surum de bunu kullaniyor. */
+  _blokHazirlaKalan(blok, s) {
     for (const p of s.poiler) p.z = Arazi.latLonYukseklik(p.lat, p.lon);
     for (const b of s.binalar) {
       let en = Infinity;
