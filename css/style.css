@@ -1,0 +1,151 @@
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+:root {
+  --zemin:   #080b10;
+  --panel:   #0e141c;
+  --cizgi:   #1e2836;
+  --yazi:    #d6e0ec;
+  --soluk:   #7d8ea5;
+  --vurgu:   #22d3ee;
+  --turuncu: #fb923c;
+}
+
+html, body {
+  height: 100%;
+  background: var(--zemin);
+  color: var(--yazi);
+  font: 13px/1.5 system-ui, "Segoe UI", sans-serif;
+  overflow: hidden;
+}
+
+body { display: flex; }
+
+/* ---------------- panel ---------------- */
+#panel {
+  width: 288px;
+  flex: 0 0 288px;
+  height: 100%;
+  overflow-y: auto;
+  background: var(--panel);
+  border-right: 1px solid var(--cizgi);
+  padding: 16px 14px 20px;
+}
+
+#panel h1 { font-size: 16px; letter-spacing: .3px; }
+#panel .alt { color: var(--soluk); font-size: 11px; margin-bottom: 16px; }
+
+section { border-top: 1px solid var(--cizgi); padding: 12px 0; }
+section h2 {
+  font-size: 11px; text-transform: uppercase; letter-spacing: .8px;
+  color: var(--soluk); margin-bottom: 9px; font-weight: 600;
+}
+
+.satir { display: flex; gap: 6px; align-items: center; margin-bottom: 7px; }
+.satir > span { color: var(--soluk); flex: 0 0 54px; font-size: 12px; }
+
+input[type=text], select {
+  flex: 1; min-width: 0;
+  background: #131b26; color: var(--yazi);
+  border: 1px solid var(--cizgi); border-radius: 5px;
+  padding: 6px 8px; font: inherit;
+}
+input[type=text]:focus, select:focus { outline: none; border-color: var(--vurgu); }
+
+button, .dosyaBtn {
+  background: #1a2432; color: var(--yazi);
+  border: 1px solid var(--cizgi); border-radius: 5px;
+  padding: 6px 11px; font: inherit; cursor: pointer;
+  white-space: nowrap; text-align: center;
+}
+button:hover, .dosyaBtn:hover { background: #22303f; border-color: #34445a; }
+button:disabled { opacity: .45; cursor: default; }
+
+button.birincil {
+  background: var(--vurgu); color: #04222a; border-color: var(--vurgu);
+  font-weight: 600; width: 100%;
+}
+button.birincil:hover { background: #4be2f5; }
+
+.modlar button { flex: 1; padding: 6px 4px; font-size: 12px; }
+.modlar button.aktif {
+  background: var(--turuncu); color: #2a1405;
+  border-color: var(--turuncu); font-weight: 600;
+}
+
+.onay {
+  display: flex; align-items: center; gap: 7px;
+  padding: 3px 0; cursor: pointer; color: var(--yazi);
+}
+.onay input { accent-color: var(--vurgu); }
+
+.kutu {
+  background: #121a25; border: 1px solid var(--cizgi); border-radius: 5px;
+  padding: 7px 9px; font-size: 11.5px; color: var(--soluk);
+  margin-top: 8px; line-height: 1.55;
+}
+.kutu b { color: var(--yazi); }
+
+#aramaSonuc { max-height: 190px; overflow-y: auto; }
+.sonuc {
+  padding: 6px 8px; border-bottom: 1px solid var(--cizgi);
+  font-size: 11.5px; color: var(--soluk); cursor: pointer;
+}
+.sonuc:hover { background: #16202c; color: var(--yazi); }
+
+.durum {
+  margin-top: 10px; font-size: 11.5px; color: var(--soluk);
+  min-height: 30px; padding: 6px 9px;
+  border-left: 2px solid var(--cizgi); background: #101720;
+}
+.durum.iyi   { border-color: #22c55e; color: #a7f3c8; }
+.durum.uyari { border-color: var(--turuncu); color: #fcd0a8; }
+.durum.hata  { border-color: #f43f5e; color: #fbb6c2; }
+
+footer {
+  margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--cizgi);
+  font-size: 10.5px; color: #55637a; line-height: 1.7;
+}
+
+/* ---------------- yukseklik seridi ---------------- */
+.seritBar {
+  height: 12px; border-radius: 3px;
+  border: 1px solid var(--cizgi); margin-bottom: 4px;
+}
+.seritYazi {
+  display: flex; justify-content: space-between;
+  font: 10.5px ui-monospace, Consolas, monospace; color: var(--soluk);
+  margin-bottom: 9px;
+}
+input[type=range] { flex: 1; min-width: 0; accent-color: var(--vurgu); }
+.deger {
+  flex: 0 0 44px; text-align: right;
+  font: 11px ui-monospace, Consolas, monospace; color: var(--vurgu);
+}
+
+/* ---------------- durak katmanlari ---------------- */
+.poiSatir { gap: 7px; }
+.poiSatir span { flex: 1; }
+.poiSayi {
+  font: 10.5px ui-monospace, Consolas, monospace;
+  color: var(--soluk); font-weight: 400;
+}
+.poiOn { width: 20px; height: 20px; flex: 0 0 20px; }
+.kutu.mini { font-size: 11px; line-height: 1.6; }
+button.ince { width: 100%; padding: 4px 8px; font-size: 11.5px; margin-bottom: 7px; }
+
+/* ---------------- harita alani ---------------- */
+main { flex: 1; position: relative; min-width: 0; }
+
+#tuval {
+  width: 100%; height: 100%; display: block;
+  cursor: grab; background: var(--zemin);
+}
+#tuval:active { cursor: grabbing; }
+
+.konum {
+  position: absolute; right: 12px; bottom: 10px;
+  background: rgba(8,11,16,.8); border: 1px solid var(--cizgi);
+  border-radius: 4px; padding: 4px 8px;
+  font: 11px ui-monospace, Consolas, monospace; color: var(--soluk);
+  pointer-events: none;
+}

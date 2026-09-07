@@ -1,0 +1,9 @@
+# Overpass disk onbellegi — uretilen veri, surum kontrolune girmez (193 MB)
+onbellek/
+
+# teshis ciktilari (?ss= ile uretilen tuval goruntuleri)
+teshis-*.png
+teshis-*.json
+
+# elle alinmis yedekler
+*.yedek

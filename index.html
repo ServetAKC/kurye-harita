@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kurye Haritasi — Izometrik</title>
+<link rel="stylesheet" href="css/style.css?s=20260908i">
+</head>
+<body>
+
+<aside id="panel">
+  <h1>Kurye Haritasi</h1>
+  <p class="alt">Gorunen bolge kendiliginden iner, ekrandan cikan silinir</p>
+
+  <section>
+    <h2>Git</h2>
+    <label class="satir">
+      <span>Yer</span>
+      <select id="git"><option value="">— sec —</option></select>
+    </label>
+    <div class="satir">
+      <input id="aramaKutu" type="text" placeholder="ara: SushiCo Beylikduzu" autocomplete="off">
+      <button id="araBtn">Ara</button>
+    </div>
+    <div id="aramaSonuc"></div>
+    <div class="kutu mini">
+      <div id="karoDurum">—</div>
+      <div id="araziDurum">—</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>Yukseklik</h2>
+    <label class="onay"><input type="checkbox" id="araziAc" checked> Arazi ve deniz</label>
+    <div id="seritBar" class="seritBar"></div>
+    <div class="seritYazi"><span id="seritAz">—</span><span id="seritCok">—</span></div>
+    <label class="satir">
+      <span>Abartma</span>
+      <input type="range" id="abartma" min="1" max="25" step="0.5" value="6">
+      <b id="abartmaDeger" class="deger">6.0×</b>
+    </label>
+    <button id="abartmaOto" class="ince">Bu gorunume gore ayarla</button>
+    <label class="onay"><input type="checkbox" id="katEs" checked> Es yukselti egrileri</label>
+    <label class="onay"><input type="checkbox" id="katKiyi" checked> Kiyi cizgisi</label>
+  </section>
+
+  <section>
+    <h2>Duraklar</h2>
+    <div id="poiKatman"></div>
+  </section>
+
+  <section>
+    <h2>Rota</h2>
+    <div class="satir modlar">
+      <button data-mod="gez" class="aktif">Gez</button>
+      <button data-mod="sube">Sube koy</button>
+      <button data-mod="musteri">Musteri ekle</button>
+    </div>
+    <label class="onay"><input type="checkbox" id="tekYon" checked> Tek yon kurallarini uygula</label>
+    <label class="satir">
+      <span>Olcut</span>
+      <select id="olcut">
+        <option value="uzunluk">En kisa yol (metre)</option>
+        <option value="sure">En hizli yol (sure)</option>
+      </select>
+    </label>
+    <div class="satir">
+      <button id="rotaBtn" class="birincil">Rotayi ciz</button>
+      <button id="temizleBtn">Temizle</button>
+    </div>
+  </section>
+
+  <section>
+    <h2>Katmanlar</h2>
+    <label class="onay"><input type="checkbox" id="katBina"> Binalar</label>
+    <label class="onay"><input type="checkbox" id="katAlan"> Park / su</label>
+    <label class="onay"><input type="checkbox" id="katAd"> Yol adlari</label>
+    <label class="onay"><input type="checkbox" id="katDugum"> Grafik kavsaklari</label>
+    <label class="onay"><input type="checkbox" id="miniMap"> Mini-map modu</label>
+    <label class="onay"><input type="checkbox" id="otoDon"> Otomatik don</label>
+  </section>
+
+  <div id="istatistik" class="kutu mini"></div>
+  <div id="durum" class="durum"></div>
+
+  <footer>
+    Surukle: kaydir &middot; Shift+surukle veya Q/E: dondur &middot; Tekerlek: yakinlas &middot; R: sifirla<br>
+    Harita &copy; OpenStreetMap katkicilari (ODbL) &middot; Yukseklik: AWS Terrain Tiles
+  </footer>
+</aside>
+
+<main>
+  <canvas id="tuval"></canvas>
+  <div id="konum" class="konum"></div>
+</main>
+
+<script src="js/proj.js?s=20260908i"></script>
+<script src="js/terrain.js?s=20260908i"></script>
+<script src="js/overpass.js?s=20260908i"></script>
+<script src="js/tiles.js?s=20260908i"></script>
+<script src="js/graph.js?s=20260908i"></script>
+<script src="js/render.js?s=20260908i"></script>
+<script src="js/main.js?s=20260908i"></script>
+</body>
+</html>
