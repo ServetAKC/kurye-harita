@@ -226,13 +226,18 @@ const Kamera = {
   },
 
   /* Kamerayi bir noktaya ortala */
-  ortala(x, y) {
+  /* Bir noktayi ekranin ortasina getir.
+     z VERILMEZSE zemin duzlemi (0) kabul edilir — eski cagrilar boyle.
+     Yukseklikteki bir seyi (kurye gibi) ortalarken z SART: izometrik
+     cizimde yukseklik goruntuyu yukari kaydiriyor, z=0'a gore ortalayinca
+     hedef ekranin ustunde kalip "alakasiz yer" gosteriliyordu. */
+  ortala(x, y, z) {
     const p = { sx: 0, sy: 0 };
     const c = Math.cos(this.aci), s = Math.sin(this.aci);
     const rx = x * c - y * s;
     const ry = x * s + y * c;
     p.sx = (rx - ry) * IZO_X * this.olcek;
-    p.sy = (-(rx + ry) * IZO_Y) * this.olcek;
+    p.sy = (-(rx + ry) * IZO_Y - (z || 0) * IZO_Z) * this.olcek;
     this.panX = this.genislik / 2 - p.sx;
     this.panY = this.yukseklik / 2 - p.sy;
   }

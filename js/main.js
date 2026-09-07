@@ -39,7 +39,8 @@ const Uyg = {
     rotaIdx: 0,      // kacinci rota (sube -> musteri i)
     segIdx: 0,       // rota icinde kacinci parca
     t: 0,            // parca icinde oran, 0..1
-    hiz: 11,         // metre/saniye (~40 km/s)
+    hiz: 35,         // metre/saniye (~126 km/s). Gercekci degil ama bu bir
+                     // simulasyon: tur bastan sona makul surede izlenebilsin.
     x: 0, y: 0, z: 0,
     aci: 0,          // gidis yonu (radyan, metre dunyasinda)
     varis: 0         // kac musteriye ulasildi
@@ -576,9 +577,21 @@ const Uyg = {
        (Cizer.ciz kosulsuz cagriliyor), yani ayrica tazeleme bayragi
        gerekmiyor. */
     this.kuryeIlerlet(dt);
+    /* Kamera takibi — OLU BOLGE ile.
+       Her karede ortalamak kamerayi surekli oynatiyor, bu da duragan
+       tamponu her karede gecersiz kilip tam yeniden cizime zorluyordu
+       (takip modunda hissedilen agirlik buydu). Kurye ekranin ortasindaki
+       kutunun disina cikmadikca kamera duruyor; cikinca ortaliyor.
+       Ortalarken z SART, yoksa yukseklik yuzunden alakasiz yer gosterilir. */
     if (this.kurye.aktif && this.kuryeIzle) {
-      Kamera.ortala(this.kurye.x, this.kurye.y);
-      hareket = true;
+      const kz = Arazi.cz(this.kurye.z || 0);
+      const p = Kamera.ekrana(this.kurye.x, this.kurye.y, kz);
+      const payX = Kamera.genislik * 0.22, payY = Kamera.yukseklik * 0.22;
+      if (Math.abs(p.sx - Kamera.genislik / 2) > payX ||
+          Math.abs(p.sy - Kamera.yukseklik / 2) > payY) {
+        Kamera.ortala(this.kurye.x, this.kurye.y, kz);
+        hareket = true;
+      }
     }
 
     // otomatik donme
