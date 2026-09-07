@@ -22,6 +22,7 @@ const Uyg = {
   sube: null,            // { dugumId, lat, lon }
   musteriler: [],
   rotalar: [],
+  teslimatSirasi: [],   // musteriler[] icindeki indekslerin ziyaret sirasi
 
   kuryeIzle: false,
 
@@ -275,34 +276,121 @@ const Uyg = {
     return Grafik.hazirla();
   },
 
+  /* ------------------------------------------------------------
+     TESLIMAT TURU
+     ------------------------------------------------------------
+     Eskiden her musteri icin AYRI bir "sube -> musteri" rotasi
+     hesaplaniyordu. Kurye birine varinca sirasi gelen rotanin
+     BASINA, yani subeye isinlaniyordu — gercek bir kurye turu
+     degil, bagimsiz cizgiler demekti.
+
+     Artik tek zincir kuruluyor: sube -> m -> m -> ... -> sube.
+     Bacaklar ardisik oldugu icin kurye kesintisiz ilerliyor.
+
+     Ziyaret sirasi da onemli: ekleme sirasiyla gitmek gereksiz
+     gidip gelme uretiyor. Once en yakin komsu ile bir sira
+     kuruluyor, sonra 2-opt ile kesisen bacaklar duzeltiliyor.
+     Sira KUS UCUSU mesafeye gore secilyor (A* ile her cifti
+     hesaplamak n^2 rota demek olurdu); secilen sira icin gercek
+     yol rotalari bir kez hesaplaniyor.
+     ------------------------------------------------------------ */
+
+  /* Iki durak arasi kus ucusu mesafe (metre) */
+  _kusUcusu(a, b) {
+    return Proj.mesafe(a.lat, a.lon, b.lat, b.lon);
+  },
+
+  /* Ziyaret sirasini bul. Donen dizi: musteriler[] icindeki indeksler. */
+  teslimatSirasiBul(donus) {
+    const M = this.musteriler, n = M.length;
+    if (n <= 1) return M.map((m, i) => i);
+
+    // --- en yakin komsu ---
+    const kalan = M.map((m, i) => i);
+    const sira = [];
+    let su = this.sube;
+    while (kalan.length) {
+      let en = 0, enD = Infinity;
+      for (let j = 0; j < kalan.length; j++) {
+        const d = this._kusUcusu(su, M[kalan[j]]);
+        if (d < enD) { enD = d; en = j; }
+      }
+      su = M[kalan[en]];
+      sira.push(kalan[en]);
+      kalan.splice(en, 1);
+    }
+    if (n < 3) return sira;
+
+    // --- 2-opt: kesisen bacaklari duzelt ---
+    const uzunluk = (s) => {
+      let t = this._kusUcusu(this.sube, M[s[0]]);
+      for (let i = 0; i + 1 < s.length; i++) t += this._kusUcusu(M[s[i]], M[s[i + 1]]);
+      if (donus) t += this._kusUcusu(M[s[s.length - 1]], this.sube);
+      return t;
+    };
+    /* n buyudukce O(n^2) tarama pahalilasir; tur sayisi sinirli tutuluyor.
+       Elle konan musteri sayisi kucuk oldugu icin pratikte birkac tur yeter. */
+    let en = uzunluk(sira), tur = 0;
+    let iyilesti = true;
+    while (iyilesti && tur++ < 40) {
+      iyilesti = false;
+      for (let i = 0; i < sira.length - 1 && !iyilesti; i++) {
+        for (let j = i + 1; j < sira.length; j++) {
+          const aday = sira.slice(0, i)
+            .concat(sira.slice(i, j + 1).reverse(), sira.slice(j + 1));
+          const u = uzunluk(aday);
+          if (u < en - 1e-6) {
+            sira.length = 0;
+            for (const v of aday) sira.push(v);
+            en = u; iyilesti = true; break;
+          }
+        }
+      }
+    }
+    return sira;
+  },
+
   testRota() {
     if (!this.sube) { this.durum('Once "Sube koy" ile bir sube isaretle.', 'uyari'); return; }
     if (!this.musteriler.length) { this.durum('Once "Musteri ekle" ile musteri koy.', 'uyari'); return; }
     const ist = this.grafigiHazirla();
     const olcut = document.getElementById('olcut').value;
+    const donusKutu = document.getElementById('subeyeDon');
+    const donus = donusKutu ? donusKutu.checked : true;
     const t0 = performance.now();
+
     this.rotalar = [];
     /* Yeni rota cizilince kurye basa donsun: eski rotanin ortasinda kalmis
        bir kurye yeni rotada anlamsiz bir yerde duruyor. */
     this.kurye.aktif = false; this.kurye.rotaIdx = 0;
     this.kurye.segIdx = 0; this.kurye.t = 0; this.kurye.varis = 0;
+
+    this.teslimatSirasi = this.teslimatSirasiBul(donus);
+
+    // duraklar: sube -> musteriler (sirayla) -> (istege bagli) sube
+    const durak = [this.sube];
+    for (const i of this.teslimatSirasi) durak.push(this.musteriler[i]);
+    if (donus) durak.push(this.sube);
+
     let toplam = 0, basarisiz = 0;
-    for (const m of this.musteriler) {
-      const r = Grafik.rotaBul(this.sube.dugumId, m.dugumId, olcut);
+    for (let i = 0; i + 1 < durak.length; i++) {
+      const r = Grafik.rotaBul(durak[i].dugumId, durak[i + 1].dugumId, olcut);
       if (!r) { basarisiz++; continue; }
       this.rotalar.push(Grafik.rotaNoktalari(r.yol));
       toplam += r.maliyet;
     }
+
     const ms = performance.now() - t0;
     const birim = olcut === 'sure' ? (Math.round(toplam / 60) + ' dk') : (Math.round(toplam) + ' m');
-    this.durum('Toplam ' + birim + '  ·  ' + ist.dugum + ' dugumluk grafikte ' +
-               ms.toFixed(0) + ' ms' +
-               (basarisiz ? ('  ·  ' + basarisiz + ' musteriye yol yok') : ''),
+    this.durum(this.musteriler.length + ' teslimatlik tur · ' + birim + '  ·  ' +
+               ist.dugum + ' dugumluk grafikte ' + ms.toFixed(0) + ' ms' +
+               (basarisiz ? ('  ·  ' + basarisiz + ' bacakta yol yok') : ''),
                basarisiz ? 'uyari' : 'iyi');
   },
 
   temizle() {
-    this.musteriler = []; this.rotalar = [];
+    this.musteriler = []; this.rotalar = []; this.teslimatSirasi = [];
+    this.kurye.aktif = false; this.kurye.varis = 0;
     this.durum('Musteriler ve rotalar silindi.');
   },
 
@@ -537,10 +625,23 @@ const Uyg = {
     }
 
     Cizer.ciz((c) => {
-      for (const r of this.rotalar) Cizer.rotaCiz(c, r, RENK.rota, 3.5);
+      /* Bacaklar sirayla ciziliyor; kuryenin GECTIGI bacaklar soluk,
+         gidecegi bacaklar parlak. Boylece turun neresinde oldugu
+         bir bakista belli oluyor. */
+      this.rotalar.forEach((r, i) => {
+        const gecti = this.kurye.varis > i || (this.kurye.aktif && this.kurye.rotaIdx > i);
+        c.globalAlpha = gecti ? 0.32 : 1;
+        Cizer.rotaCiz(c, r, RENK.rota, 3.5);
+        if (!gecti) Cizer.rotaOklariCiz(c, r, 'rgba(190,240,255,0.9)');
+        c.globalAlpha = 1;
+      });
       this.musteriler.forEach((m, i) => {
         const k = this.konum(m);
-        Cizer.isaretciCiz(c, k.x, k.y, k.z, RENK.musteri, '#' + (i + 1), 22);
+        /* Etiket ekleme sirasi degil TESLIMAT sirasi: kurye hangi sirayla
+           ugrayacaksa o. Rota henuz cizilmediyse ekleme sirasi gosterilir. */
+        const s = this.teslimatSirasi.indexOf(i);
+        Cizer.isaretciCiz(c, k.x, k.y, k.z, RENK.musteri,
+                          s >= 0 ? String(s + 1) : '#' + (i + 1), 22);
       });
       if (this.sube) {
         const k = this.konum(this.sube);

@@ -1475,6 +1475,46 @@ const Cizer = {
     c.stroke();
   },
 
+  /* Rota uzerine gidis yonu oklari. Ok METRE dunyasinda kuruluyor
+     (kuryedeki gibi): ekran uzerinde dondurmek egik kamerada oku
+     yanlis yone baktirir. Oklar esit ARALIKLA degil esit MESAFEDE
+     konuyor — yoksa kisa parcalarda ok yigilip uzun duz yollarda
+     hic ok kalmiyor. */
+  rotaOklariCiz(c, noktalar, renk) {
+    if (!noktalar || noktalar.length < 2) return;
+    const ARALIK = Math.max(40, 90 / Math.max(Kamera.olcek, 0.05));   // metre
+    const BOY = ARALIK * 0.18, EN = BOY * 0.5;
+    let birikim = ARALIK * 0.5;
+
+    c.fillStyle = renk;
+    for (let i = 0; i + 1 < noktalar.length; i++) {
+      const a = noktalar[i], b = noktalar[i + 1];
+      const dx = b.x - a.x, dy = b.y - a.y;
+      const uz = Math.hypot(dx, dy);
+      if (uz < 1e-6) continue;
+      const ix = dx / uz, iy = dy / uz;      // ileri birim vektor
+      const yx = -iy, yy = ix;               // yan birim vektor
+
+      let m = birikim;
+      while (m < uz) {
+        const az = a.z || 0, bz = b.z || 0;
+        const px = a.x + ix * m, py = a.y + iy * m;
+        const pz = Arazi.cz(az + (bz - az) * (m / uz)) + 3.5;
+        const u  = Kamera.ekrana(px + ix * BOY, py + iy * BOY, pz);
+        const s1 = Kamera.ekrana(px - ix * BOY * 0.3 + yx * EN, py - iy * BOY * 0.3 + yy * EN, pz);
+        const s2 = Kamera.ekrana(px - ix * BOY * 0.3 - yx * EN, py - iy * BOY * 0.3 - yy * EN, pz);
+        c.beginPath();
+        c.moveTo(u.sx, u.sy);
+        c.lineTo(s1.sx, s1.sy);
+        c.lineTo(s2.sx, s2.sy);
+        c.closePath();
+        c.fill();
+        m += ARALIK;
+      }
+      birikim = m - uz;
+    }
+  },
+
   /* ---------------- ANA CIZIM ---------------- */
 
   /* Tamponu ekrana yapistir. Olcek degistiyse olcekleyerek yapistirir
