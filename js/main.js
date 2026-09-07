@@ -23,6 +23,107 @@ const Uyg = {
   musteriler: [],
   rotalar: [],
 
+  kuryeIzle: false,
+
+  /* ------------------------------------------------------------
+     KURYE — rota uzerinde hareket eden arac
+     ------------------------------------------------------------
+     Konum bir SEGMENT indeksi + o segmentteki oran (0..1) ile tutuluyor;
+     her karede kat edilen mesafe kadar ilerletiliyor. Boylece hiz kare
+     hizindan bagimsiz: 60 fps'te de 30 fps'te de ayni sure gecince ayni
+     yere varilir.
+     ------------------------------------------------------------ */
+  kurye: {
+    aktif: false,
+    rotaIdx: 0,      // kacinci rota (sube -> musteri i)
+    segIdx: 0,       // rota icinde kacinci parca
+    t: 0,            // parca icinde oran, 0..1
+    hiz: 11,         // metre/saniye (~40 km/s)
+    x: 0, y: 0, z: 0,
+    aci: 0,          // gidis yonu (radyan, metre dunyasinda)
+    varis: 0         // kac musteriye ulasildi
+  },
+
+  kuryeBaslat() {
+    if (!this.rotalar.length) {
+      this.durum('Once "Rotayi ciz" ile bir rota olustur.', 'uyari');
+      return;
+    }
+    const k = this.kurye;
+    k.aktif = true; k.rotaIdx = 0; k.segIdx = 0; k.t = 0; k.varis = 0;
+    this.kuryeKonumla();
+    this.kuryeDugmesiniYaz();
+    this.durum('Kurye yola cikti.', 'iyi');
+  },
+
+  kuryeDurdur(mesaj) {
+    this.kurye.aktif = false;
+    this.kuryeDugmesiniYaz();
+    if (mesaj) this.durum(mesaj, 'iyi');
+  },
+
+  kuryeDugmesiniYaz() {
+    const b = document.getElementById('kuryeBtn');
+    if (b) b.textContent = this.kurye.aktif ? 'Kuryeyi durdur' : 'Kuryeyi baslat';
+  },
+
+  /* Segment + oran -> metre konumu ve yon acisi */
+  kuryeKonumla() {
+    const k = this.kurye;
+    const yol = this.rotalar[k.rotaIdx];
+    if (!yol || yol.length < 2) return;
+
+    /* Yolun SONUNDAYSA son noktada dur. Burada da a + (b-a)*t hesaplamak
+       hataliydi: parca bitince segIdx son noktayi gosterir ve t sifirlanir,
+       yani kurye parcanin BASINA doner. Testte yakalandi. */
+    if (k.segIdx >= yol.length - 1) {
+      const o = yol[yol.length - 2], s = yol[yol.length - 1];
+      k.x = s.x; k.y = s.y; k.z = s.z || 0;
+      k.aci = Math.atan2(s.y - o.y, s.x - o.x);
+      return;
+    }
+
+    const a = yol[k.segIdx], b = yol[k.segIdx + 1];
+    k.x = a.x + (b.x - a.x) * k.t;
+    k.y = a.y + (b.y - a.y) * k.t;
+    k.z = (a.z || 0) + ((b.z || 0) - (a.z || 0)) * k.t;
+    k.aci = Math.atan2(b.y - a.y, b.x - a.x);
+  },
+
+  kuryeIlerlet(dt) {
+    const k = this.kurye;
+    if (!k.aktif || !this.rotalar.length) return false;
+    let kalan = k.hiz * dt / 1000;          // bu karede kat edilecek metre
+    let guvenlik = 0;                       // bozuk rotada sonsuz donguye karsi
+
+    while (kalan > 0 && guvenlik++ < 10000) {
+      const yol = this.rotalar[k.rotaIdx];
+      if (!yol || yol.length < 2) { this.kuryeDurdur(); return false; }
+
+      if (k.segIdx >= yol.length - 1) {
+        k.varis++;                          // bu musteriye varildi
+        if (k.rotaIdx + 1 >= this.rotalar.length) {
+          this.kuryeKonumla();              // son noktada dur
+          this.kuryeDurdur('Kurye ' + k.varis + ' teslimati tamamladi.');
+          return true;
+        }
+        k.rotaIdx++; k.segIdx = 0; k.t = 0;
+        continue;
+      }
+
+      const a = yol[k.segIdx], b = yol[k.segIdx + 1];
+      const uz = Math.hypot(b.x - a.x, b.y - a.y);
+      if (uz < 1e-6) { k.segIdx++; k.t = 0; continue; }
+
+      const kalanParca = uz * (1 - k.t);
+      if (kalan < kalanParca) { k.t += kalan / uz; kalan = 0; }
+      else { kalan -= kalanParca; k.segIdx++; k.t = 0; }
+    }
+
+    this.kuryeKonumla();
+    return true;
+  },
+
   miniMap: false,
   otoDon: false,
 
@@ -181,6 +282,10 @@ const Uyg = {
     const olcut = document.getElementById('olcut').value;
     const t0 = performance.now();
     this.rotalar = [];
+    /* Yeni rota cizilince kurye basa donsun: eski rotanin ortasinda kalmis
+       bir kurye yeni rotada anlamsiz bir yerde duruyor. */
+    this.kurye.aktif = false; this.kurye.rotaIdx = 0;
+    this.kurye.segIdx = 0; this.kurye.t = 0; this.kurye.varis = 0;
     let toplam = 0, basarisiz = 0;
     for (const m of this.musteriler) {
       const r = Grafik.rotaBul(this.sube.dugumId, m.dugumId, olcut);
@@ -212,6 +317,21 @@ const Uyg = {
 
     document.getElementById('araBtn').onclick = () => this.ara();
     document.getElementById('aramaKutu').onkeydown = (e) => { if (e.key === 'Enter') this.ara(); };
+    document.getElementById('kuryeBtn').onclick = () => {
+      if (this.kurye.aktif) this.kuryeDurdur('Kurye durduruldu.');
+      else this.kuryeBaslat();
+    };
+    document.getElementById('kuryeIzle').onchange = (e) => {
+      this.kuryeIzle = e.target.checked;
+    };
+    const kHiz = document.getElementById('kuryeHiz');
+    const kHizYaz = () => {
+      this.kurye.hiz = parseFloat(kHiz.value);
+      document.getElementById('kuryeHizDeger').textContent =
+        Math.round(this.kurye.hiz * 3.6) + ' km/s';
+    };
+    kHiz.oninput = kHizYaz;
+    kHizYaz();
     document.getElementById('rotaBtn').onclick = () => this.testRota();
     document.getElementById('temizleBtn').onclick = () => this.temizle();
 
@@ -364,6 +484,15 @@ const Uyg = {
 
     let hareket = false;
 
+    /* Kurye hareketi. Canli katman her karede yeniden ciziliyor
+       (Cizer.ciz kosulsuz cagriliyor), yani ayrica tazeleme bayragi
+       gerekmiyor. */
+    this.kuryeIlerlet(dt);
+    if (this.kurye.aktif && this.kuryeIzle) {
+      Kamera.ortala(this.kurye.x, this.kurye.y);
+      hareket = true;
+    }
+
     // otomatik donme
     if (this.otoDon) { Kamera.aci += 0.0022 * dt / 16; hareket = true; }
 
@@ -416,6 +545,10 @@ const Uyg = {
       if (this.sube) {
         const k = this.konum(this.sube);
         Cizer.isaretciCiz(c, k.x, k.y, k.z, RENK.sube, 'SUBE', 34);
+      }
+      if (this.kurye.aktif || this.kurye.varis) {
+        Cizer.kuryeCiz(c, this.kurye.x, this.kurye.y,
+                       Arazi.cz(this.kurye.z || 0), this.kurye.aci);
       }
       if (this.miniMap) this.miniMapMaskesi(c);
     });

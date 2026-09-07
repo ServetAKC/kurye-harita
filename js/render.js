@@ -1421,6 +1421,60 @@ const Cizer = {
     c.stroke();
   },
 
+  /* Kurye araci. Gittigi yonu gostermesi icin ok seklinde ciziliyor;
+     ok metre dunyasinda dondurulup oyle yansitiliyor, yani izometrik
+     goruntude yol boyunca dogru yone bakiyor (ekran uzerinde dondurmek
+     bunu vermez, egik kamerada ok yanlis yone kayar).
+     Govde zemine degil, kucuk bir yuksekliğe cizilip altina golge
+     konuyor — arazinin uzerinde durdugu boylece belli oluyor. */
+  kuryeCiz(c, x, y, z, aci) {
+    const BOY = 9, EN = 5.5;                 // metre
+    const ileri = { x: Math.cos(aci), y: Math.sin(aci) };
+    const yan = { x: -ileri.y, y: ileri.x };
+
+    // ucgen: burun + iki arka kose (metre dunyasinda)
+    const nokta = [
+      { x: x + ileri.x * BOY,        y: y + ileri.y * BOY },
+      { x: x - ileri.x * BOY * 0.55 + yan.x * EN, y: y - ileri.y * BOY * 0.55 + yan.y * EN },
+      { x: x - ileri.x * BOY * 0.15,              y: y - ileri.y * BOY * 0.15 },
+      { x: x - ileri.x * BOY * 0.55 - yan.x * EN, y: y - ileri.y * BOY * 0.55 - yan.y * EN }
+    ];
+
+    // golge (zeminde, saydam)
+    c.beginPath();
+    for (let i = 0; i < nokta.length; i++) {
+      const p = Kamera.ekrana(nokta[i].x, nokta[i].y, z);
+      if (i === 0) c.moveTo(p.sx, p.sy); else c.lineTo(p.sx, p.sy);
+    }
+    c.closePath();
+    c.fillStyle = 'rgba(0,0,0,0.35)';
+    c.fill();
+
+    // govde (biraz yukarida)
+    const YUKSEK = 6;
+    c.beginPath();
+    for (let i = 0; i < nokta.length; i++) {
+      const p = Kamera.ekrana(nokta[i].x, nokta[i].y, z + YUKSEK);
+      if (i === 0) c.moveTo(p.sx, p.sy); else c.lineTo(p.sx, p.sy);
+    }
+    c.closePath();
+    c.fillStyle = RENK.kurye;
+    c.fill();
+    c.strokeStyle = 'rgba(8,11,16,0.85)';
+    c.lineWidth = 1.2;
+    c.stroke();
+
+    // direk: govdeyi zemine bagla, yukseklik hissi versin
+    const alt = Kamera.ekrana(x, y, z);
+    const ust = Kamera.ekrana(x, y, z + YUKSEK);
+    c.beginPath();
+    c.moveTo(alt.sx, alt.sy);
+    c.lineTo(ust.sx, ust.sy);
+    c.strokeStyle = 'rgba(0,0,0,0.45)';
+    c.lineWidth = 1.4;
+    c.stroke();
+  },
+
   /* ---------------- ANA CIZIM ---------------- */
 
   /* Tamponu ekrana yapistir. Olcek degistiyse olcekleyerek yapistirir
