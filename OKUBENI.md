@@ -251,6 +251,11 @@ Duraklar artik haritaya tiklayarak degil, panele **koordinat ya da adres
 yazarak** konuyor. Kutu ikisini de kabul ediyor: `41.0011, 28.6417` gibi bir
 sey yazilirsa dogrudan kullanilir, degilse adres sayilip cozulur.
 
+Haritada bir noktaya tiklayarak da koordinat alinabiliyor: kutunun yanindaki
+**Haritadan** dugmesi acilir, tiklanan noktanin koordinati kutuya yazilir ve
+ters cozumleme ile "burasi neresi" durum satirinda gorunur. Ayni dugmeye tekrar
+basmak modu kapatir. Durak KOYMAZ — koyma yine "Sube yap" / "Musteri ekle" ile.
+
 ### Parcalar
 
 | dosya | isi |

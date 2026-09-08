@@ -186,3 +186,10 @@ main { flex: 1; position: relative; min-width: 0; }
 }
 .ekstra summary:hover { color: var(--yazi); }
 .ekstra .modlar { margin-top: 5px; }
+
+/* "Haritadan" dugmesi .modlar disinda duruyor, aktif gorunumu
+   oradaki kurala takilmiyor — genel kural. */
+button[data-mod].aktif {
+  border-color: var(--vurgu); color: var(--vurgu); background: #10222c;
+}
+#haritadanBtn { flex: 0 0 auto; }

@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kurye Haritasi — Izometrik</title>
-<link rel="stylesheet" href="css/style.css?s=20260908k">
+<link rel="stylesheet" href="css/style.css?s=20260908m">
 </head>
 <body>
 
@@ -36,8 +36,8 @@
     <div class="seritYazi"><span id="seritAz">—</span><span id="seritCok">—</span></div>
     <label class="satir">
       <span>Abartma</span>
-      <input type="range" id="abartma" min="1" max="25" step="0.5" value="6">
-      <b id="abartmaDeger" class="deger">6.0×</b>
+      <input type="range" id="abartma" min="1" max="25" step="0.5" value="2">
+      <b id="abartmaDeger" class="deger">2.0×</b>
     </label>
     <div class="satir onayar">
       <button data-abartma="1">1×</button>
@@ -62,6 +62,8 @@
     <div class="satir">
       <input id="konumKutu" type="text" autocomplete="off"
              placeholder="41.0011, 28.6417  ya da  adres yaz">
+      <button data-mod="koordinat" id="haritadanBtn"
+              title="Ac, sonra haritada bir noktaya tikla: koordinat kutuya gelir">Haritadan</button>
     </div>
     <div id="konumOneri"></div>
     <div class="satir">
@@ -131,14 +133,14 @@
   <div id="konum" class="konum"></div>
 </main>
 
-<script src="js/depo.js?s=20260908k"></script>
-<script src="js/proj.js?s=20260908k"></script>
-<script src="js/terrain.js?s=20260908k"></script>
-<script src="js/overpass.js?s=20260908k"></script>
-<script src="js/adres.js?s=20260908k"></script>
-<script src="js/tiles.js?s=20260908k"></script>
-<script src="js/graph.js?s=20260908k"></script>
-<script src="js/render.js?s=20260908k"></script>
-<script src="js/main.js?s=20260908k"></script>
+<script src="js/depo.js?s=20260908m"></script>
+<script src="js/proj.js?s=20260908m"></script>
+<script src="js/terrain.js?s=20260908m"></script>
+<script src="js/overpass.js?s=20260908m"></script>
+<script src="js/adres.js?s=20260908m"></script>
+<script src="js/tiles.js?s=20260908m"></script>
+<script src="js/graph.js?s=20260908m"></script>
+<script src="js/render.js?s=20260908m"></script>
+<script src="js/main.js?s=20260908m"></script>
 </body>
 </html>

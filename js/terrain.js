@@ -25,7 +25,7 @@ const Arazi = {
   saat: 0,
 
   enAz: 0, enCok: 200,         // yuklu karolardaki yukseklik araligi
-  abartma: 6,
+  abartma: 2,
   denizSeviyesi: 0.5,
   hataSayisi: 0,
 

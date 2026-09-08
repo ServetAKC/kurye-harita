@@ -914,8 +914,15 @@ const Uyg = {
 
     document.querySelectorAll('[data-mod]').forEach(b => {
       b.onclick = () => {
-        this.mod = b.dataset.mod;
-        document.querySelectorAll('[data-mod]').forEach(x => x.classList.toggle('aktif', x === b));
+        /* Acik olan moda tekrar basmak kapatir. "Haritadan" dugmesi
+           panelin ustunde, "Gez" ise katlanmis bolumun icinde duruyor;
+           kapatmak icin oraya inmek zorunda kalinmasin. */
+        this.mod = (this.mod === b.dataset.mod && b.dataset.mod !== 'gez')
+          ? 'gez' : b.dataset.mod;
+        document.querySelectorAll('[data-mod]').forEach(x =>
+          x.classList.toggle('aktif', x.dataset.mod === this.mod));
+        document.getElementById('tuval').style.cursor =
+          (this.mod === 'gez') ? '' : 'crosshair';
       };
     });
 
@@ -1036,10 +1043,37 @@ const Uyg = {
 
   tikla(e) {
     if (this.mod === 'gez') return;
-    const ist = this.grafigiHazirla();
-    if (!ist || !ist.dugum) { this.durum('Once biraz bekle, yol verisi insin.', 'uyari'); return; }
     const r = document.getElementById('tuval').getBoundingClientRect();
     const w = Kamera.dunyayaArazi(e.clientX - r.left, e.clientY - r.top);
+
+    /* KOORDINAT SECME — durak koymaz, sadece tiklanan noktanin
+       koordinatini kutuya yazar. Elle yazmanin yanindaki ikinci yol:
+       nereye koyacagini biliyorsan yazarsin, haritada gosterecegin bir
+       yerse tiklarsin. Grafik hazir olmasi gerekmiyor, cunku yola
+       oturtma "Sube yap"/"Musteri ekle" aninda yapiliyor. */
+    if (this.mod === 'koordinat') {
+      const c = Proj.cografiye(w.x, w.y);
+      const kutu = document.getElementById('konumKutu');
+      kutu.value = c.lat.toFixed(6) + ', ' + c.lon.toFixed(6);
+      this._secilenAdres = null;
+      document.getElementById('konumOneri').innerHTML = '';
+      this.durum('Koordinat alindi: ' + kutu.value +
+                 '  ·  simdi "Sube yap" ya da "Musteri ekle"', 'iyi');
+      /* Burasi neresi? Ters cozumleme onbellekli ve tek istek;
+         basarisiz olursa koordinat yine de kutuda duruyor. */
+      Adres.ters(c.lat, c.lon)
+        .then((y) => {
+          if (!y || !y.ad) return;
+          if (kutu.value !== c.lat.toFixed(6) + ', ' + c.lon.toFixed(6)) return;
+          this._secilenAdres = { lat: c.lat, lon: c.lon, ad: y.ad };
+          this.durum(y.ad, 'iyi');
+        })
+        .catch(() => {});
+      return;
+    }
+
+    const ist = this.grafigiHazirla();
+    if (!ist || !ist.dugum) { this.durum('Once biraz bekle, yol verisi insin.', 'uyari'); return; }
     const yk = Grafik.enYakinDugum(w.x, w.y);
     if (!yk) return;
     const sinir = Math.max(200, 60 / Math.max(Kamera.olcek, 0.005));
