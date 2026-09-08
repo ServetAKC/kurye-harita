@@ -391,3 +391,72 @@ mantigi sinar; rAF'in durumu bilgi olarak yazilir.
 
 Olculdu (8 Eylul 2026, Beylikduzu, 4 musteri, kapasite 3):
 `4 teslimat · 2 sefer · 8948 m · 52403 dugumluk grafikte 67 ms (matris 58 ms)`
+
+---
+
+## Touge bul
+
+Yuklu bolgede **surulecek yol** ariyor ve yesil vurguluyor. Panelin en altinda.
+
+Dag gecidi sart degil — kullanicinin verdigi yon: *"dag gecidi degil, direk
+sehrin icinde kivrimli yolda olur, veya iste sahil yolu gibi de"*. Rakim bu
+yuzden bonus, sart degil.
+
+**Iki tur:**
+- **Virajli** — cok donen yol. Sehir ici de olabilir.
+- **Uzun duz** — onunu gorebildigin, basilacak yol. Sahil yolu tam buraya duser.
+
+**Ortak sart NIS olmak:** dusuk trafik sinifi, az kavsak, kenarinda ev
+olmamasi. Ana arter ne kadar guzel olursa olsun touge degil.
+
+### Nasil calisiyor
+
+1. **Zincirleme.** OSM'de tek yol onlarca parcaya bolunmus olabilir (kopru,
+   isim degisimi, karo kenari). Parca parca bakmak yaniltir: 400 m'lik parca
+   "dumduz" gorunur ama bagli oldugu yol kivrimlidir. Uc uca gelen ve ayni yola
+   ait parcalar once tek zincir yapiliyor. Kavsakta birden cok devam varsa
+   birlestirilmiyor — hangi kola gidecegi belirsiz.
+
+2. **Yeniden ornekleme.** Donus acisi ham OSM noktalarindan olculemez: bazi
+   yollarda nokta her 3 m'de, bazisinda her 80 m'de. Sik noktali yolda olcum
+   gurultusu sahte viraj uretiyor. Once 25 m'de bir yeniden ornekleniyor.
+
+3. **Olcumler:** km basina donus (derece), kus ucusuna oran, rakim araligi,
+   km basina kavsak, km basina bina, suya yakinlik orani.
+
+4. **Puanlama.** Agirlikli ortalama, carpim degil: carpimda tek sifir her seyi
+   siler, oysa rakimsiz ama cok kivrimli issiz bir yol da iyi yoldur.
+
+### Elemeler
+
+- **Halka ve cikmaz:** kus ucusuna oran 3.2'yi asarsa ya da bastan sona 300 m
+  bile ilerlemiyorsa atiliyor. Sebep olculdu: Buyukcekmece'de `kivrim 28.47`
+  cikan bir "yol" 800 m gidip 28 m otede bitiyordu — site ici halkasi.
+- **Yaya yolu, merdiven, service** (otopark ici) hic bakilmiyor.
+- **Otoyol ve trunk** trafik carpaniyla eleniyor.
+
+### Bir hata: kavsak sayaci hep 0
+
+Ilk surumde kavsak testi `Grafik.dugumler`'e bakiyordu. Grafik ancak bir rota
+cizilince kuruluyor, dolayisiyla touge taramasinda hep bos ve **her yolda
+"0 kavsak/km"** cikiyordu. Test bunu yakaladi. Kavsak zaten yol verisinden
+cikarilabilir: bir dugum birden fazla yolda geciyorsa orasi kavsaktir. Artik
+oyle sayiliyor, grafige bagimli degil.
+
+### Olculdu (8 Eylul 2026, gercek OSM verisi)
+
+Beylikduzu, 3071 yol parcasi -> 2191 zincir, 94 ms:
+
+| tur | ornek | donus/km | kivrim |
+|---|---|---|---|
+| virajli | isimsiz residential, 0.9 km | 659 | 2.59 |
+| duz | Yesilyurt Caddesi, 1.53 km | 19 | 1.00 |
+
+Referans degerler: duz sahil yolu 17-73 °/km, mahalle arasi 250-330,
+gercekten kivrimli 500-840.
+
+Sahil bonusu isini goruyor: Buyukcekmece'de `Yuzuncu Yil Bulvari` (su
+orani 0.80) duz listesinde birinci sirada.
+
+Test: `node test_touge.js` — iki ayri bolgede tarayip "virajli denilen
+gercekten kivrimli mi, duz denilen gercekten duz mu" diye olcuyor.

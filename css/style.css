@@ -193,3 +193,11 @@ button[data-mod].aktif {
   border-color: var(--vurgu); color: var(--vurgu); background: #10222c;
 }
 #haritadanBtn { flex: 0 0 auto; }
+
+/* --- Touge sonuclari --- */
+.tougeSatir { cursor: pointer; }
+.tougeSatir:hover { background: #16202c; }
+.tougeSatir.secili { background: #14301f; }
+.durakSatir .no.touge { background: #14532d; color: #bbf7d0; }
+#tougeSonuc { max-height: 210px; overflow-y: auto; }
+#tougeSonuc .alt { margin-top: 5px; font-size: 10px; }

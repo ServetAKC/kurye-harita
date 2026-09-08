@@ -800,6 +800,79 @@ const Uyg = {
     });
   },
 
+  /* ============================================================
+     TOUGE BULMA — panel baglantisi
+     ============================================================ */
+  tougeBul() {
+    const tur = document.getElementById('tougeTur').value;
+    this.durum('Yollar taraniyor...');
+    /* Tarama birkac yuz ms surebiliyor; durum yazisinin ekrana
+       cikmasi icin bir kare bekle, yoksa kullanici donmus saniyor. */
+    setTimeout(() => {
+      let c;
+      try { c = Touge.bul(tur, 8); }
+      catch (e) { this.durum('Touge taramasi hata verdi: ' + e.message, 'hata'); return; }
+
+      if (c.hata) { this.durum(c.hata, 'uyari'); this.tougeYaz(null); return; }
+      this.tougeYaz(c);
+      Cizer.kirlet();
+      this.durum(c.toplam + ' aday · ' + c.zincir + ' zincir (' + c.yol + ' yol parcasi) · ' +
+                 c.ms.toFixed(0) + ' ms' +
+                 (c.rakimVar ? '' : '  ·  arazi kapali, rakim hesaba katilmadi'),
+                 c.sonuc.length ? 'iyi' : 'uyari');
+    }, 30);
+  },
+
+  tougeYaz(c) {
+    const kap = document.getElementById('tougeSonuc');
+    kap.innerHTML = '';
+    if (!c || !c.sonuc.length) {
+      kap.textContent = c ? 'Bu bolgede olcute uyan yol yok — baska yere git ya da turu degistir.'
+                          : '—';
+      return;
+    }
+    c.sonuc.forEach((y, i) => {
+      const s = document.createElement('div');
+      s.className = 'durakSatir tougeSatir';
+      const n = document.createElement('b');
+      n.className = 'no touge';
+      n.textContent = String(i + 1);
+      const a = document.createElement('span');
+      a.className = 'ad';
+      const km = (y.olcum.uzunluk / 1000).toFixed(1);
+      /* Bilesenleri de yaz: neden bu yol secildi gorunsun.
+         Virajlida donus/km ve rakim, duzde kus ucusuna oran. */
+      const ek = (y.tur === 'viraj')
+        ? Math.round(y.olcum.donusPerKm) + '°/km · ' + Math.round(y.olcum.rakimAralik) + ' m rakim'
+        : 'kivrim ' + y.olcum.kivrim.toFixed(2);
+      a.textContent = y.ad + '  ·  ' + km + ' km · ' + ek;
+      a.title = y.ad + '\n' + y.yolTuru + ' · ' + y.parca + ' parca\n' +
+                'puan ' + y.puan.toFixed(2) + ' · nis ' + y.nis.toFixed(2) +
+                ' · trafik ' + y.trafik.toFixed(2) + '\n' +
+                Math.round(y.olcum.kavsakPerKm) + ' kavsak/km · ' +
+                Math.round(y.olcum.binaPerKm) + ' bina/km';
+      const p = document.createElement('b');
+      p.className = 'poiSayi';
+      p.textContent = y.puan.toFixed(2);
+      s.appendChild(n); s.appendChild(a); s.appendChild(p);
+      s.onclick = () => {
+        Touge.secili = y;
+        const o = y.nokta[Math.floor(y.nokta.length / 2)];
+        this.gitKonuma(o.lat, o.lon, Math.max(Kamera.olcek, 0.5));
+        this.tougeYaz(c);
+        this.durum(y.ad + '  ·  ' + km + ' km · ' + y.yolTuru, 'iyi');
+      };
+      if (Touge.secili === y) s.classList.add('secili');
+      kap.appendChild(s);
+    });
+    if (c.kesilen) {
+      const d = document.createElement('div');
+      d.className = 'alt';
+      d.textContent = c.kesilen + ' aday daha vardi, ilk 8 gosteriliyor.';
+      kap.appendChild(d);
+    }
+  },
+
   rotalariUnut() {
     this.rotalar = []; this.teslimatSirasi = []; this.bacakBilgi = [];
     this.kurye.aktif = false; this.kurye.varis = 0;
@@ -891,6 +964,12 @@ const Uyg = {
     kHizYaz();
     document.getElementById('rotaBtn').onclick = () => this.testRota();
     document.getElementById('temizleBtn').onclick = () => this.temizle();
+
+    document.getElementById('tougeBtn').onclick = () => this.tougeBul();
+    document.getElementById('tougeTemizle').onclick = () => {
+      Touge.temizle(); this.tougeYaz(null); Cizer.kirlet();
+      this.durum('Touge sonuclari silindi.');
+    };
 
     /* --- koordinat / adres ile durak koyma --- */
     document.getElementById('subeYapBtn').onclick = () => this.durakEkle('sube');
@@ -1167,6 +1246,21 @@ const Uyg = {
     }
 
     Cizer.ciz((c) => {
+      /* Touge vurgusu EN ALTTA: rota ve duraklar onun ustunde kalsin.
+         Secili olan daha parlak ve kalin — listede tiklanan hangisi
+         oldugu haritada anlasilsin. */
+      if (Touge.sonuc.length) {
+        for (const y of Touge.sonuc) {
+          const secili = (Touge.secili === y);
+          const nokta = y.olcum.ornek.map((p) => ({
+            x: p.x, y: p.y, z: Arazi.latLonYukseklik(p.lat, p.lon)
+          }));
+          Cizer.rotaCiz(c, nokta,
+                        secili ? 'rgba(74,222,128,0.95)' : 'rgba(34,197,94,0.55)',
+                        secili ? 5 : 3);
+        }
+      }
+
       /* Bacaklar sirayla ciziliyor; kuryenin GECTIGI bacaklar soluk,
          gidecegi bacaklar parlak. Boylece turun neresinde oldugu
          bir bakista belli oluyor. */
