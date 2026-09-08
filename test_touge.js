@@ -8,8 +8,12 @@ const bekle = (ms) => new Promise(r => setTimeout(r, ms));
 
 /* Nerede arayalim: adres cubugundan konum verilebiliyor */
 const YERLER = [
-  { ad: 'Beylikduzu (sehir ici)',      lat: 41.0011, lon: 28.6417, olcek: 0.9 },
-  { ad: 'Buyukcekmece kuzeyi (tepeler)', lat: 41.0850, lon: 28.5600, olcek: 0.55 }
+  { ad: 'Beylikduzu (sehir ici)',       lat: 41.0011, lon: 28.6417, olcek: 0.9 },
+  { ad: 'Buyukcekmece kuzeyi (kirsal)', lat: 41.0850, lon: 28.5600, olcek: 0.55 },
+  /* Gercek orman/dag yolu: bulucunun asil ise yaramasi gereken yer.
+     Kirsalda calismadigi supheye dusunce eklendi. */
+  { ad: 'Belgrad Ormani (orman)',       lat: 41.1830, lon: 28.9800, olcek: 0.55 },
+  { ad: 'Sile-Agva yolu (kiyi+orman)',  lat: 41.1500, lon: 29.6100, olcek: 0.45 }
 ];
 
 (async () => {

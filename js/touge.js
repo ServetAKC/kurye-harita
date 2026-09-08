@@ -56,6 +56,10 @@ const Touge = {
      28 m otede bitiyordu. */
   ENCOK_KIVRIM: 3.2,
   ENAZ_KUS_UCUSU: 300,     // metre — bu kadar bile ilerlemiyorsa tur degil
+  /* "Duz" demek icin sert esikler. Olculdu: gercek duz yol 17-73
+     derece/km, kivrim 1.00-1.02. Bunlarin ustu duz degil. */
+  ENCOK_DUZ_DONUS: 110,
+  ENCOK_DUZ_KIVRIM: 1.10,
 
   /* Yol sinifina gore trafik carpani. 1 = issiz, 0 = kalabalik.
      Turkiye'de tertiary ve unclassified tipik dag yolu; residential
@@ -447,6 +451,16 @@ const Touge = {
 
     // duz
     if (m.uzunluk < this.ENAZ_UZUNLUK_DUZ) return null;
+    /* DUZLUK SERT ESIK. Puanlama tek basina yetmiyordu: duzluk terimi
+       sifir olsa bile yol nis + trafik + uzunluk + manzaradan 0.35'i
+       gecip "duz" diye listelenebiliyordu. Ormanda test bunu yakaladi —
+       Belgrad ve Sile'de "duz" listesinin ortalama kivrimi 1.12-1.18,
+       donus 153-205 derece/km cikti; bunlar duz degil, o bolgede uzun
+       duz yol OLMADIGI icin en az kotu olanlar. Duz yol yoksa dogru
+       cevap "sonuc yok", en az kivrimli virajli yolu duz diye
+       gostermek degil. */
+    if (m.donusPerKm > this.ENCOK_DUZ_DONUS) return null;
+    if (m.kivrim > this.ENCOK_DUZ_KIVRIM) return null;
     /* Duzluk iki olcuyle birden: kus ucusuna oran (genel egrilik)
        ve km basina donus (yerel kivrilma). Ikisi ayri sey: genis
        bir yay kus ucusunu az bozar ama surekli donuyordur. */

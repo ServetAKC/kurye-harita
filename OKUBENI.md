@@ -446,6 +446,13 @@ olmamasi. Ana arter ne kadar guzel olursa olsun touge degil.
 - **Halka ve cikmaz:** kus ucusuna oran 3.2'yi asarsa ya da bastan sona 300 m
   bile ilerlemiyorsa atiliyor. Sebep olculdu: Buyukcekmece'de `kivrim 28.47`
   cikan bir "yol" 800 m gidip 28 m otede bitiyordu — site ici halkasi.
+- **Duz olmayan "duz"lar:** duz turu icin sert esik var — 110 derece/km ustu
+  ya da kivrim 1.10 ustu dogrudan eleniyor. Puanlama tek basina yetmiyordu:
+  duzluk terimi sifir olsa bile yol nis+trafik+uzunluk+manzaradan esigi
+  gecebiliyordu. Belgrad Ormani ve Sile'de test bunu yakaladi — "duz"
+  listesinin ortalama kivrimi 1.12-1.18, donusu 153-205 derece/km cikiyordu.
+  O bolgelerde uzun duz yol YOK; dogru cevap "sonuc yok", en az kivrimli
+  virajli yolu duz diye gostermek degil. Simdi Belgrad'da duz listesi bos.
 - **Yaya yolu, merdiven, service** (otopark ici) hic bakilmiyor.
 - **Otoyol ve trunk** trafik carpaniyla eleniyor.
 
@@ -472,5 +479,23 @@ gercekten kivrimli 500-840.
 Sahil bonusu isini goruyor: Buyukcekmece'de `Yuzuncu Yil Bulvari` (su
 orani 0.80) duz listesinde birinci sirada.
 
-Test: `node test_touge.js` — iki ayri bolgede tarayip "virajli denilen
-gercekten kivrimli mi, duz denilen gercekten duz mu" diye olcuyor.
+### Kirsalda da calisiyor
+
+Dort bolgede olculdu (virajli listesinin ortalama donusu):
+
+|  bolge | donus/km | duz aday |
+|---|---|---|
+| Beylikduzu (sehir ici) | 459 | 13 |
+| Buyukcekmece kuzeyi (kirsal) | 430 | 15 |
+| Belgrad Ormani | **680** | 0 |
+| Sile-Agva (kiyi+orman) | **674** | 2 |
+
+Bulucu ormanda sehirdekinden DAHA iyi calisiyor. Ormanda duz aday cikmamasi
+hata degil: orada uzun duz yol yok.
+
+Tek gercek sinir: tarama sadece **o an yuklu karolarda** calisiyor. Kirsalda
+once oraya gidip verinin inmesini beklemek gerekiyor.
+
+Test: `node test_touge.js` — dort ayri bolgede tarayip "virajli denilen
+gercekten kivrimli mi, duz denilen gercekten duz mu, dar sokaklar elendi mi"
+diye olcuyor.
