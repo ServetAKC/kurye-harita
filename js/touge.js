@@ -536,18 +536,161 @@ const Touge = {
              manzara: m.manzara, uzunP: uzunP };
   },
 
+  /* Ekranda yuklu olan karolardan kaynak kumesi */
+  kaynakTopla() {
+    return {
+      yollar: this.yollariTopla(),
+      binalar: this.binalariTopla(),
+      sular: this.sulariTopla()
+    };
+  },
+
+  /* ============================================================
+     BOLGESEL TARAMA — "su ilcenin X km cevresinde ara"
+     ------------------------------------------------------------
+     Normal tarama sadece o an EKRANDA YUKLU karolara bakiyor, yani
+     hep bulundugun yeri tariyor. Baska bir ilceyi taramak icin
+     oraya gidip beklemek gerekiyordu.
+
+     Burada veri dogrudan cekiliyor. Seviye MAHALLE olmak zorunda:
+     bina verisi sadece o seviyede var (Overpass.DETAY), izbelik ve
+     dar sokak elemesi de binalara dayaniyor. Ilce seviyesinde
+     tarasak butun yollar "izbelik 1.00" cikardi ve sehir ile kir
+     ayirt edilemezdi.
+
+     Karo izgarasi ve parti gruplamasi Karolar'inkinin AYNISI —
+     boylece hem diskteki onbellek (Depo) hem osmveri.php onbellegi
+     normal gezinmeyle paylasilıyor, ayni yer iki kere inmiyor.
+     ============================================================ */
+  ENCOK_BLOK: 40,
+
+  async bolgeVerisi(lat, lon, km, ilerleme) {
+    const seviye = 'mahalle';
+    const z = Overpass.DETAY[seviye].karoZoom;
+    const p = Overpass.DETAY[seviye].parti || [2, 2];
+
+    /* Yaricapi enlem/boylam farkina cevir. Boylam kutuplara gidildikce
+       kisaldigi icin cos(enlem) ile bolunuyor. */
+    const dLat = km / 111.132;
+    const dLon = km / (111.320 * Math.cos(lat * Math.PI / 180));
+
+    const x0 = Math.floor(Karolar.lonX(lon - dLon, z));
+    const x1 = Math.floor(Karolar.lonX(lon + dLon, z));
+    const y0 = Math.floor(Karolar.latY(lat + dLat, z));   // karo y'si enlemle TERS
+    const y1 = Math.floor(Karolar.latY(lat - dLat, z));
+
+    const gruplar = new Map();
+    for (let x = x0; x <= x1; x++) {
+      for (let y = y0; y <= y1; y++) {
+        const gk = Math.floor(x / p[0]) + ',' + Math.floor(y / p[1]);
+        let g = gruplar.get(gk);
+        if (!g) { g = []; gruplar.set(gk, g); }
+        g.push({ z: z, x: x, y: y });
+      }
+    }
+    const bloklar = Array.from(gruplar.values());
+    if (bloklar.length > this.ENCOK_BLOK) {
+      return { hata: 'Bu yaricap icin ' + bloklar.length + ' blok inmesi gerekiyor ' +
+                     '(sinir ' + this.ENCOK_BLOK + '). Yaricapi kucult.' };
+    }
+
+    /* Merkeze yakin blok once: sonuc listesi dolmaya merkezden basliyor
+       ve kullanici erken bir sey goruyor. */
+    const om = Proj.metreye(lat, lon);
+    bloklar.forEach((g) => {
+      let en = Infinity;
+      for (const t of g) {
+        const mk = Karolar.karoMetreKutusu(t.z, t.x, t.y);
+        en = Math.min(en, Math.hypot((mk.minx + mk.maxx) / 2 - om.x,
+                                     (mk.miny + mk.maxy) / 2 - om.y));
+      }
+      g._u = en;
+    });
+    bloklar.sort((a, b) => a._u - b._u);
+
+    const yolG = new Map(), binaG = new Map(), suG = [];
+    const suGorulen = new Set();
+    let basarisiz = 0, bitti = 0;
+
+    /* Sirayla degil ESZAMANLI, ama Karolar'in slot sayisi kadar:
+       Overpass'i dovmemek icin. Sirali indirmede 9 blok 40 sn
+       suruyordu, 5'li kumede 12 sn. */
+    const kume = Karolar.ESZAMANLI || 5;
+    for (let i = 0; i < bloklar.length; i += kume) {
+      const parca = bloklar.slice(i, i + kume);
+      await Promise.all(parca.map(async (g) => {
+        let mg = Infinity, mb = Infinity, mk = -Infinity, md = -Infinity;
+        for (const t of g) {
+          const kk = Karolar.karoKutusu(t.z, t.x, t.y);
+          if (kk[0] < mg) mg = kk[0];
+          if (kk[1] < mb) mb = kk[1];
+          if (kk[2] > mk) mk = kk[2];
+          if (kk[3] > md) md = kk[3];
+        }
+        try {
+          const ham = await Overpass.indirKutu([mg, mb, mk, md], seviye, null);
+          const s = await Ayristirici.ayristirBolerek(ham);
+          for (const y of s.yollar) if (!yolG.has(y.id)) yolG.set(y.id, y);
+          for (const b of s.binalar) if (!binaG.has(b.id)) binaG.set(b.id, b);
+          for (const c of s.kiyi) {
+            if (suGorulen.has('k' + c.id)) continue;
+            suGorulen.add('k' + c.id);
+            for (const q of c.nokta) suG.push(q);
+          }
+          for (const a of s.alanlar) {
+            if (a.tur !== 'su' || suGorulen.has('a' + a.id)) continue;
+            suGorulen.add('a' + a.id);
+            for (const q of a.nokta) suG.push(q);
+          }
+        } catch (e) {
+          /* Tek blogun dusmesi taramayi bitirmemeli: 20 blokluk bir
+             aramada biri 504 verirse geri kalani yine ise yarar.
+             Kac blogun dustugu sonucta yaziliyor, sessizce eksik
+             sonuc dondurmuyoruz. */
+          basarisiz++;
+          console.warn('[touge] blok inmedi:', (e && e.message) || e);
+        }
+        bitti++;
+        if (ilerleme) ilerleme(bitti, bloklar.length, basarisiz);
+      }));
+    }
+
+    /* Bina kose ve merkezlerini kaynak bicimine cevir */
+    const kose = [], merkez = [];
+    for (const b of binaG.values()) {
+      if (!b.nokta || !b.nokta.length) continue;
+      let sx = 0, sy = 0;
+      for (const q of b.nokta) { kose.push({ x: q.x, y: q.y }); sx += q.x; sy += q.y; }
+      merkez.push({ x: sx / b.nokta.length, y: sy / b.nokta.length });
+    }
+
+    const yollar = [];
+    for (const y of yolG.values()) {
+      if (y.sinif === 'yaya' || y.tur === 'service') continue;
+      if (!y.nokta || y.nokta.length < 2 || !y.dugum) continue;
+      yollar.push(y);
+    }
+
+    return {
+      kaynak: { yollar: yollar, binalar: { kose: kose, merkez: merkez }, sular: suG },
+      blok: bloklar.length, basarisiz: basarisiz, bina: binaG.size
+    };
+  },
+
   /* ------------------------------------------------------------
      ANA GIRIS
+     kaynak verilmezse ekranda yuklu karolardan toplanir.
      ------------------------------------------------------------ */
-  bul(tur, enFazla) {
+  bul(tur, enFazla, kaynak) {
     const t0 = performance.now();
-    const yollar = this.yollariTopla();
+    kaynak = kaynak || this.kaynakTopla();
+    const yollar = kaynak.yollar;
     if (!yollar.length) return { hata: 'Once yol verisi insin (haritada biraz gez).' };
 
-    const binalar = this.binalariTopla();
+    const binalar = kaynak.binalar;
     const izgara = this.binaIzgarasi(binalar.kose);
     this.izbeG = this.izbeIzgarasi(binalar.merkez);
-    this.suIzgara = this.binaIzgarasi(this.sulariTopla());
+    this.suIzgara = this.binaIzgarasi(kaynak.sular);
 
     /* KAVSAK SAYIMI YOLLARDAN, GRAFIKTEN DEGIL.
        Once Grafik.dugumler'e bakiliyordu; grafik ancak bir rota

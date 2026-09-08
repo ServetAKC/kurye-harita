@@ -824,6 +824,80 @@ const Uyg = {
     }, 30);
   },
 
+  /* ------------------------------------------------------------
+     BASKA BIR YERDE ARA
+     Adres cozulur, oraya gidilir, o bolgenin verisi dogrudan
+     cekilip taranir. Ekranda yuklu olani beklemek gerekmiyor.
+     ------------------------------------------------------------ */
+  async tougeYerdeAra() {
+    const metin = document.getElementById('tougeYer').value.trim();
+    if (!metin) { this.durum('Once bir yer yaz (ilce, mahalle, adres).', 'uyari'); return; }
+    const km = Math.max(1, Math.min(10, parseFloat(document.getElementById('tougeKm').value) || 4));
+    const tur = document.getElementById('tougeTur').value;
+
+    let nokta = Adres.koordinatCozumle(metin), ad = metin;
+    if (!nokta) {
+      this.durum('Yer cozuluyor: ' + metin);
+      try {
+        const liste = await Adres.ara(metin);
+        if (!liste.length) { this.durum('Yer bulunamadi: ' + metin, 'uyari'); return; }
+        nokta = { lat: liste[0].lat, lon: liste[0].lon };
+        ad = liste[0].ad.split(',').slice(0, 2).join(',');
+        if (liste.length > 1) {
+          /* Birden fazla sonucta ilkini sessizce secmek yanlis ilceyi
+             taramak demek; kullanici gorsun ve isterse degistirsin. */
+          const kap = document.getElementById('tougeYerOneri');
+          kap.innerHTML = '';
+          liste.slice(0, 5).forEach((y) => {
+            const d = document.createElement('div');
+            d.className = 'sonuc';
+            d.textContent = y.ad;
+            d.onclick = () => {
+              kap.innerHTML = '';
+              document.getElementById('tougeYer').value =
+                y.lat.toFixed(6) + ', ' + y.lon.toFixed(6);
+              this.durum(y.ad + ' secildi — "Orada ara" ile tara.', 'iyi');
+            };
+            kap.appendChild(d);
+          });
+        }
+      } catch (e) {
+        this.durum('Adres servisi hatasi: ' + e.message, 'hata');
+        return;
+      }
+    }
+
+    /* Projeksiyon merkezi tasinmali: Ayristirici noktalarin x/y'sini
+       ayristirma aninda Proj ile hesapliyor. Merkezi tasimadan cok
+       uzak bir bolgeyi ayristirsak koordinatlar bozulurdu. */
+    this.gitKonuma(nokta.lat, nokta.lon, Math.max(Kamera.olcek, 0.55));
+
+    const btn = document.getElementById('tougeYerBtn');
+    btn.disabled = true;
+    this.durum(ad + ' · ' + km + ' km · veri iniyor...');
+    try {
+      const v = await Touge.bolgeVerisi(nokta.lat, nokta.lon, km, (bitti, toplam, kotu) => {
+        this.durum(ad + ' · ' + km + ' km · blok ' + bitti + '/' + toplam +
+                   (kotu ? ' (' + kotu + ' inmedi)' : ''));
+      });
+      if (v.hata) { this.durum(v.hata, 'uyari'); return; }
+
+      const c = Touge.bul(tur, 8, v.kaynak);
+      if (c.hata) { this.durum(c.hata, 'uyari'); this.tougeYaz(null); return; }
+      this.tougeYaz(c);
+      Cizer.kirlet();
+      this.durum(ad + ' · ' + km + ' km · ' + v.blok + ' blok · ' +
+                 c.zincir + ' zincir · ' + c.toplam + ' aday' +
+                 (c.darEle ? ' · ' + c.darEle + ' dar sokak elendi' : '') +
+                 (v.basarisiz ? '  ·  ' + v.basarisiz + ' blok inmedi, sonuc eksik olabilir' : ''),
+                 v.basarisiz ? 'uyari' : (c.sonuc.length ? 'iyi' : 'uyari'));
+    } catch (e) {
+      this.durum('Bolge taramasi hata verdi: ' + e.message, 'hata');
+    } finally {
+      btn.disabled = false;
+    }
+  },
+
   tougeYaz(c) {
     const kap = document.getElementById('tougeSonuc');
     kap.innerHTML = '';
@@ -988,8 +1062,13 @@ const Uyg = {
     document.getElementById('temizleBtn').onclick = () => this.temizle();
 
     document.getElementById('tougeBtn').onclick = () => this.tougeBul();
+    document.getElementById('tougeYerBtn').onclick = () => this.tougeYerdeAra();
+    document.getElementById('tougeYer').onkeydown = (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); this.tougeYerdeAra(); }
+    };
     document.getElementById('tougeTemizle').onclick = () => {
       Touge.temizle(); this.tougeYaz(null); Cizer.kirlet();
+      document.getElementById('tougeYerOneri').innerHTML = '';
       this.durum('Touge sonuclari silindi.');
     };
 

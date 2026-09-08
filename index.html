@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Kurye Haritasi — Izometrik</title>
-<link rel="stylesheet" href="css/style.css?s=20260908w">
+<link rel="stylesheet" href="css/style.css?s=20260908x">
 </head>
 <body>
 
@@ -132,9 +132,21 @@
       </select>
     </label>
     <div class="satir">
-      <button id="tougeBtn" class="birincil">Touge bul</button>
+      <button id="tougeBtn" class="birincil">Bu bolgede ara</button>
       <button id="tougeTemizle">Temizle</button>
     </div>
+
+    <div class="satir">
+      <input id="tougeYer" type="text" autocomplete="off"
+             placeholder="baska yer: Sile, Polonezkoy, Agva...">
+    </div>
+    <div id="tougeYerOneri"></div>
+    <label class="satir">
+      <span>Yaricap</span>
+      <input type="number" id="tougeKm" min="1" max="10" step="1" value="4">
+      <b class="deger">km</b>
+      <button id="tougeYerBtn">Orada ara</button>
+    </label>
     <div id="tougeSonuc" class="kutu mini">—</div>
   </section>
 
@@ -152,15 +164,15 @@
   <div id="konum" class="konum"></div>
 </main>
 
-<script src="js/depo.js?s=20260908w"></script>
-<script src="js/proj.js?s=20260908w"></script>
-<script src="js/terrain.js?s=20260908w"></script>
-<script src="js/overpass.js?s=20260908w"></script>
-<script src="js/adres.js?s=20260908w"></script>
-<script src="js/tiles.js?s=20260908w"></script>
-<script src="js/graph.js?s=20260908w"></script>
-<script src="js/touge.js?s=20260908w"></script>
-<script src="js/render.js?s=20260908w"></script>
-<script src="js/main.js?s=20260908w"></script>
+<script src="js/depo.js?s=20260908x"></script>
+<script src="js/proj.js?s=20260908x"></script>
+<script src="js/terrain.js?s=20260908x"></script>
+<script src="js/overpass.js?s=20260908x"></script>
+<script src="js/adres.js?s=20260908x"></script>
+<script src="js/tiles.js?s=20260908x"></script>
+<script src="js/graph.js?s=20260908x"></script>
+<script src="js/touge.js?s=20260908x"></script>
+<script src="js/render.js?s=20260908x"></script>
+<script src="js/main.js?s=20260908x"></script>
 </body>
 </html>

@@ -559,3 +559,34 @@ adres dogru mu, origin/destination yolun uclari mi, ara noktalar 9 sinirini
 asiyor mu, tekrar var mi, **ara noktalar gercekten yolun uzerinde mi** ve
 bastan sona SIRALI mi. Sile-Agva'da olculdu: ara noktalarin yoldan en buyuk
 sapmasi 0.1 m.
+
+### Baska bir yerde ara (bolgesel tarama)
+
+"Bu bolgede ara" sadece o an EKRANDA YUKLU karolara bakiyor, yani hep
+bulundugun yeri tariyor. Alttaki kutuya bir ilce/adres yazip yaricap verince
+o bolgenin verisi **dogrudan cekilip** taraniyor; oraya gidip beklemek
+gerekmiyor.
+
+**Seviye MAHALLE olmak zorunda.** Bina verisi sadece o seviyede var
+(`Overpass.DETAY`), izbelik ve dar sokak elemesi de binalara dayaniyor. Ilce
+seviyesinde tarasaydik butun yollar "izbelik 1.00" cikardi ve sehir ile kir
+ayirt edilemezdi.
+
+Karo izgarasi ve parti gruplamasi `Karolar`'inkinin **aynisi** — boylece hem
+diskteki onbellek (`Depo`) hem `osmveri.php` onbellegi normal gezinmeyle
+paylasiliyor, ayni yer iki kere inmiyor.
+
+Bloklar 5'li kumeler halinde es zamanli iniyor ve durum satirinda
+"blok 4/9" diye ilerliyor. Bir blok duserse tarama bitmiyor: kacinin
+inmedigi sonucta yaziliyor, sessizce eksik sonuc donmuyor.
+
+Yaricap 1-10 km, blok sinirı 40. Projeksiyon merkezi taramadan ONCE oraya
+tasiniyor (`gitKonuma`), cunku `Ayristirici` noktalarin x/y'sini ayristirma
+aninda `Proj` ile hesapliyor.
+
+**Olculdu (8 Eylul 2026):** Beylikduzu'nde acilip "Sile, Istanbul" 4 km
+arandi. 9 blok indi, 844 zincir tarandi, 54 aday bulundu, 82 dar sokak
+elendi. Sonuclarin hepsi 29.5-29.65 boylaminda, yani gercekten Sile'de —
+Beylikduzu'nde (28.6) degil.
+
+Test: `node test_bolge.js`
