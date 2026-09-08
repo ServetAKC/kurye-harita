@@ -1020,5 +1020,16 @@ const Touge = {
     return u;
   },
 
+  /* Cizim icin yukseklikleri sakla. Her karede arazi ornegi almak
+     8 sonuc x ~200 nokta = kare basina 1600 ornek ederdi; arazi
+     verisi degismedikce (Arazi.surum) yeniden orneklenmiyor.
+     x/y SAKLANMIYOR: projeksiyon merkezi tasininca bayatliyor,
+     cizimde lat/lon'dan yeniden hesaplaniyor. */
+  cizimeHazirla(y) {
+    if (y._araziSurum === Arazi.surum) return;
+    y._araziSurum = Arazi.surum;
+    for (const p of y.olcum.ornek) p.z = Arazi.latLonYukseklik(p.lat, p.lon);
+  },
+
   temizle() { this.sonuc = []; this.secili = null; }
 };

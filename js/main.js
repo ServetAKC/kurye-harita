@@ -804,6 +804,12 @@ const Uyg = {
      TOUGE BULMA — panel baglantisi
      ============================================================ */
   tougeBul() {
+    /* Secili ilce varsa arama SADECE orada. Kullanici "Beylikduzu
+       seciyorum Esenyurt Avcilar geliyo, ben sadece o bolgeyi
+       istiyorum" dedi: eskiden bu dugme ekranda YUKLU olan her seyi
+       tariyordu, komsu ilceler de dahildi. */
+    if (Sinir.secili) { this.ilcedeAra(Sinir.secili); return; }
+
     const tur = document.getElementById('tougeTur').value;
     this.durum('Yollar taraniyor...');
     /* Tarama birkac yuz ms surebiliyor; durum yazisinin ekrana
@@ -1070,7 +1076,58 @@ const Uyg = {
     const b = document.getElementById('ilceBtn');
     if (b) b.classList.remove('aktif');
     document.getElementById('tuval').style.cursor = '';
+    this.tougeDugmesiniYaz();
     Cizer.kirlet();
+  },
+
+  /* ------------------------------------------------------------
+     ILCE SEC — tiklamak sadece SECER, aramaz
+     ------------------------------------------------------------
+     Once tiklamak dogrudan aramayi baslatiyordu. Kullanicinin
+     istedigi akis ayri: "bir yeri secince o yeri ekranda
+     centerlasin, SONRA 'bu bolgede ara' deyince sadece o ilceye
+     baksin".
+
+     Secim yapilinca mod kapaniyor (fare vurgusu dursun, yollar
+     geri gelsin) ama Sinir.secili ve Sinir.aktif duruyor: sinir
+     cizili kaliyor ve "Bu bolgede ara" artik o ilceye kilitli.
+     ------------------------------------------------------------ */
+  ilceSec(ilce) {
+    Sinir.secili = ilce;
+    Sinir.uzerinde = null;
+
+    /* Ilceyi ekrana ortala ve sigdir. Sabit bir olcek kucuk ilcede
+       cok uzak, buyuk ilcede cok yakin kalirdi. */
+    this.gitKonumaYumusak(ilce.merkez.lat, ilce.merkez.lon,
+                          this.kutuyaOlcek(ilce.kutu));
+
+    /* Secme modundan cik: yollar/binalar geri gelsin, fare
+       gezdirince ilceler parlamasin. Sinir cizimi kaliyor. */
+    this.ilceKatmanlariGeriAl();
+    this.ilceModu = false;
+    this.mod = 'gez';
+    this._ilceKameraYedek = null;
+    const ib = document.getElementById('ilceBtn');
+    if (ib) ib.classList.remove('aktif');
+    document.getElementById('tuval').style.cursor = '';
+
+    /* Eski sonuclar baska bir ilceye ait, dursalar yaniltir. */
+    Touge.temizle();
+    this.tougeYaz(null);
+    this.tougeDugmesiniYaz();
+    Cizer.kirlet();
+    this.durum(ilce.ad + ' secildi — "' + ilce.ad + " icinde ara\" ile tara.", 'iyi');
+  },
+
+  /* Arama dugmesi hangi kapsamda arayacagini soylesin: secili ilce
+     varsa arama ORAYA kilitli, yoksa ekrandaki yuklu bolgeye. */
+  tougeDugmesiniYaz() {
+    const b = document.getElementById('tougeBtn');
+    if (!b) return;
+    b.textContent = Sinir.secili ? (Sinir.secili.ad + ' icinde ara') : 'Bu bolgede ara';
+    b.title = Sinir.secili
+      ? 'Arama sadece ' + Sinir.secili.ad + ' sinirlari icinde yapilacak'
+      : 'Ekranda yuklu bolgede ara';
   },
 
   /* Tiklanan ilcede tara. Ilcenin kendi kutusu kullaniliyor;
@@ -1089,29 +1146,12 @@ const Uyg = {
     const mahalleDahil = document.getElementById('tougeMahalle').checked;
 
     /* Ilcenin kosegeninin yarisi = kapsayan daire yaricapi. Ilce
-       kare degil ama blok izgarasi zaten kutuya gore kuruluyor. */
+       kare degil ama blok izgarasi zaten kutuya gore kuruluyor;
+       ilceye degmeyen bloklar sonra eleniyor. */
     const kt = ilce.kutu;
     const enM = Proj.mesafe(kt.g, kt.b, kt.g, kt.d) / 2;
     const boyM = Proj.mesafe(kt.g, kt.b, kt.k, kt.b) / 2;
     const km = Math.max(enM, boyM) / 1000;
-
-    /* Secilen ilceye YUMUSAK yakinlas: merkez aninda kayiyor ama
-       olcek ana donguyle eriyor. Kutuya sigdirilıyor, sabit bir
-       olcek kucuk ilcede cok uzak, buyuk ilcede cok yakin kalirdi. */
-    this.gitKonumaYumusak(ilce.merkez.lat, ilce.merkez.lon, this.kutuyaOlcek(kt));
-
-    /* Secim yapildi: yollar ve binalar geri gelsin, yoksa yakinlasip
-       bos haritaya bakiyorsun. Sinir cizimi kaliyor — hangi ilcede
-       oldugun gorunsun. Mod da kapaniyor ki bir sonraki tiklama
-       yeni bir ilce taramasi baslatmasin. */
-    this.ilceKatmanlariGeriAl();
-    this.ilceModu = false;
-    this.mod = 'gez';
-    Sinir.uzerinde = null;      // fare vurgusu kalmasin
-    this._ilceKameraYedek = null;
-    const ib = document.getElementById('ilceBtn');
-    if (ib) ib.classList.remove('aktif');
-    document.getElementById('tuval').style.cursor = '';
 
     this.durum(ilce.ad + ' · ' + km.toFixed(1) + ' km · veri iniyor...');
 
@@ -1516,6 +1556,7 @@ const Uyg = {
     document.getElementById('tougeTemizle').onclick = () => {
       Touge.temizle(); this.tougeYaz(null);
       Sinir.temizle(); this.ilceModuKapat();
+      this.tougeDugmesiniYaz();
       document.getElementById('tougeYerOneri').innerHTML = '';
       Cizer.kirlet();
       this.durum('Touge sonuclari silindi.');
@@ -1712,12 +1753,8 @@ const Uyg = {
       const cg = Proj.cografiye(w.x, w.y);
       const o = Sinir.noktadakiIlce(cg.lat, cg.lon);
       if (!o) { this.durum('Orada ilce yok — sinirlarin icine tikla.', 'uyari'); return; }
-      /* Once vurgula ve HEMEN ciz: arama saniyeler suruyor, o sure
-         boyunca kullanici hangisini sectigini gormeli. */
-      Sinir.secili = o;
-      Sinir.uzerinde = null;
-      Cizer.kirlet();
-      this.ilcedeAra(o);
+      /* Tiklamak SECER, aramaz. Arama "... icinde ara" dugmesiyle. */
+      this.ilceSec(o);
       return;
     }
 
@@ -1845,9 +1882,21 @@ const Uyg = {
       if (Touge.sonuc.length) {
         for (const y of Touge.sonuc) {
           const secili = (Touge.secili === y);
-          const nokta = y.olcum.ornek.map((p) => ({
-            x: p.x, y: p.y, z: Arazi.latLonYukseklik(p.lat, p.lon)
-          }));
+          /* KOORDINATLAR HER KAREDE lat/lon'dan YENIDEN HESAPLANIYOR.
+             Onceden olcum sirasinda hesaplanmis p.x/p.y kullaniliyordu;
+             ama projeksiyon merkezi harita gezindikce tasiniyor
+             (Proj.merkeziAyarla) ve o metre degerleri bayatliyordu.
+             Sonuc: yesil yollar haritayi boydan boya kesen dumduz
+             paralel cizgilere donusuyordu. Sinir cizimi ayni tuzaga
+             dusmesin diye zaten lat/lon tutuyor; burasi atlanmis.
+
+             z olcum sirasinda saklaniyor (Touge.cizimeHazirla), her
+             karede arazi ornegi alinmiyor. */
+          Touge.cizimeHazirla(y);
+          const nokta = y.olcum.ornek.map((p) => {
+            const m = Proj.metreye(p.lat, p.lon);
+            return { x: m.x, y: m.y, z: p.z };
+          });
           Cizer.rotaCiz(c, nokta,
                         secili ? 'rgba(74,222,128,0.95)' : 'rgba(34,197,94,0.55)',
                         secili ? 5 : 3);
