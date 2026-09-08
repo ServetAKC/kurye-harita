@@ -590,3 +590,58 @@ elendi. Sonuclarin hepsi 29.5-29.65 boylaminda, yani gercekten Sile'de —
 Beylikduzu'nde (28.6) degil.
 
 Test: `node test_bolge.js`
+
+### Mahalle sokaklari, camur ve kapali yollar
+
+Kullanici: *"cok abuk zubuk, kapali, camur, asfalt olmayan veya evlerin
+arasinda sokak arasi, ortaya coluk cocuk firlicak yerler gosteriyo"*.
+
+Once olculdu — tahmin yerine veriye bakildi (Sile 4 km, 1138 yol):
+
+| etiket | kac yolda var |
+|---|---|
+| `surface` | **21** (hepsi asphalt) |
+| `access` | 1 |
+| `barrier` | 0 |
+| `tracktype` | 0 |
+| `highway=residential` | **936** |
+
+Iki sonuc cikti:
+
+**1. Yuzey/erisim etiketleri Turkiye'de neredeyse yok.** "Asfalt olmayani ele"
+filtresi bu veride nadiren devreye giriyor — camurlu yolu ELEYEMIYORUZ, cunku
+camurlu oldugu veride yazmiyor. Filtre yine de var (etiketi olan eleniyor,
+olmayan "bilinmiyor" sayilip geciyor) ama asil korumayi o yapmiyor.
+
+**2. Asil sebep yol sinifi.** Yollarin %82'si `residential` — ki OSM'de bu
+sinifin TANIMI zaten "yerlesim icindeki yol". `living_street` ise "yayanin
+oncelikli oldugu, cocugun oynadigi sokak". Sikayet dogrudan bu iki sinif.
+
+Ikisi de artik **varsayilan olarak eleniyor.** Panelde kutucuk var:
+"Mahalle sokaklarini da kat" — sehir icindeki kivrimli sokaklari gormek
+isteyen aciyor.
+
+**Bir hata daha cikti:** izbelik bina yogunluguna bakiyordu ama Turkiye'de
+kirsal binalar OSM'e girilmemis. Sile'de butun yollar "70 m icinde bina yok"
+diyordu — bina OLMADIGI icin degil, bina VERISI olmadigi icin. Projedeki eski
+"yukseklik yoksa 0 donme" tuzaginin aynisi. Artik **yol yogunlugu** da
+olculuyor (km yol / km2): yollar her zaman haritada, koy sokagi baska
+sokaklarin arasindadir, kir yolunun cevresinde yol yoktur.
+
+Durum satirinda ne elendigi yaziyor ("elendi: 738 mahalle sokagi, 6 dar") —
+"burada iyi yol yok" ile "filtre fazla sert" ayirt edilebilsin diye.
+
+**Olculdu (once/sonra):**
+
+| bolge | eski ilk sonuc | yeni ilk sonuc |
+|---|---|---|
+| Sile | (isimsiz residential) 2.0 km | **Cardakli Caddesi** 11.1 km, tertiary |
+| Polonezkoy | Ogumce Yolu 0.9 km, residential | **(isimsiz unclassified)** 2.1 km |
+
+Sile'de 738, Polonezkoy'de 197 mahalle sokagi elendi; Polonezkoy'de ayrica
+8 yol yuzey etiketi yuzunden. Eleme sonrasi Sile'de 23, Polonezkoy'de 19 aday
+kaldi — yani liste bosalmiyor.
+
+Test: `node test_eleme.js` — kutucuk kapali ve acikken ayri ayri tarayip
+eleme sayilarini dokuyor, ve eleme sonrasi listede mahalle sokagi kalmadigini
+dogruluyor.

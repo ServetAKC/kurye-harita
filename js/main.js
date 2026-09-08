@@ -810,14 +810,14 @@ const Uyg = {
        cikmasi icin bir kare bekle, yoksa kullanici donmus saniyor. */
     setTimeout(() => {
       let c;
-      try { c = Touge.bul(tur, 8); }
+      try { c = Touge.bul(tur, 8, null, { mahalleDahil: document.getElementById('tougeMahalle').checked }); }
       catch (e) { this.durum('Touge taramasi hata verdi: ' + e.message, 'hata'); return; }
 
       if (c.hata) { this.durum(c.hata, 'uyari'); this.tougeYaz(null); return; }
       this.tougeYaz(c);
       Cizer.kirlet();
       this.durum(c.toplam + ' aday · ' + c.zincir + ' zincir (' + c.yol + ' yol parcasi) · ' +
-                 (c.darEle ? c.darEle + ' dar sokak elendi · ' : '') +
+                 this.tougeEleme(c) +
                  c.ms.toFixed(0) + ' ms' +
                  (c.rakimVar ? '' : '  ·  arazi kapali, rakim hesaba katilmadi'),
                  c.sonuc.length ? 'iyi' : 'uyari');
@@ -882,13 +882,14 @@ const Uyg = {
       });
       if (v.hata) { this.durum(v.hata, 'uyari'); return; }
 
-      const c = Touge.bul(tur, 8, v.kaynak);
+      const c = Touge.bul(tur, 8, v.kaynak,
+        { mahalleDahil: document.getElementById('tougeMahalle').checked });
       if (c.hata) { this.durum(c.hata, 'uyari'); this.tougeYaz(null); return; }
       this.tougeYaz(c);
       Cizer.kirlet();
       this.durum(ad + ' · ' + km + ' km · ' + v.blok + ' blok · ' +
                  c.zincir + ' zincir · ' + c.toplam + ' aday' +
-                 (c.darEle ? ' · ' + c.darEle + ' dar sokak elendi' : '') +
+                 this.tougeEleme(c) +
                  (v.basarisiz ? '  ·  ' + v.basarisiz + ' blok inmedi, sonuc eksik olabilir' : ''),
                  v.basarisiz ? 'uyari' : (c.sonuc.length ? 'iyi' : 'uyari'));
     } catch (e) {
@@ -896,6 +897,19 @@ const Uyg = {
     } finally {
       btn.disabled = false;
     }
+  },
+
+  /* Eleme kirilimi: kullanici NEYIN elendigini gorsun. Yoksa
+     "burada iyi yol yok" ile "filtre fazla sert" ayirt edilemiyor. */
+  tougeEleme(c) {
+    const e = c.eleme || {};
+    const p = [];
+    if (e.mahalle) p.push(e.mahalle + ' mahalle sokagi');
+    if (c.darEle) p.push(c.darEle + ' dar');
+    if (e.yuzey) p.push(e.yuzey + ' bozuk yuzey');
+    if (e.toprak) p.push(e.toprak + ' toprak');
+    if (e.kapali) p.push(e.kapali + ' kapali');
+    return p.length ? ' · elendi: ' + p.join(', ') + ' · ' : ' · ';
   },
 
   tougeYaz(c) {

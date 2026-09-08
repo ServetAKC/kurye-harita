@@ -62,12 +62,65 @@ const Touge = {
   ENCOK_DUZ_KIVRIM: 1.10,
 
   /* Yol sinifina gore trafik carpani. 1 = issiz, 0 = kalabalik.
-     Turkiye'de tertiary ve unclassified tipik dag yolu; residential
-     issiz gorunur ama kenari ev doludur, o yuzden ortada. */
+     Turkiye'de tertiary ve unclassified tipik ilceler arasi yol. */
   TRAFIK: {
     motorway: 0.02, trunk: 0.05, primary: 0.2, secondary: 0.55,
-    tertiary: 0.9, unclassified: 1.0, residential: 0.5,
-    living_street: 0.35, track: 0.85, service: 0.15
+    tertiary: 0.9, unclassified: 1.0, residential: 0.3,
+    living_street: 0.1, track: 0.4, service: 0.15
+  },
+
+  /* ------------------------------------------------------------
+     MAHALLE SOKAKLARI
+     ------------------------------------------------------------
+     Kullanici: "evlerin arasinda sokak arasi, ortaya coluk cocuk
+     firlicak yerler gosteriyo".
+
+     OSM'de `residential` sinifinin TANIMI zaten "yerlesim icindeki
+     yol", `living_street` ise "yayanin oncelikli oldugu, cocugun
+     oynadigi sokak". Yani sikayet dogrudan bu iki sinif.
+
+     Olculdu (Sile 4 km): 1138 yolun 936'si residential, 13'u
+     living_street. Bu yuzden sonuc listesi bunlarla doluyordu.
+
+     Varsayilan olarak ikisi de eleniyor. Panelde kutucuk var:
+     sehir icindeki kivrimli sokaklari gormek isteyen acabiliyor
+     (kullanicinin daha onceki istegi "sehrin icinde kivrimli yol
+     da olur" bu kutucukla karsilaniyor).
+     ------------------------------------------------------------ */
+  MAHALLE_SINIFI: { residential: 1, living_street: 1 },
+
+  /* ------------------------------------------------------------
+     YUZEY VE ERISIM
+     ------------------------------------------------------------
+     "camur, asfalt olmayan" ve "kapali" yollari elemek icin.
+
+     ONEMLI SINIR: bu etiketler Turkiye'de neredeyse hic girilmemis.
+     Olculdu (Sile 4 km, 1138 yol): surface 21 yolda var (hepsi
+     asphalt), access 1 yolda, barrier ve tracktype hic yok. Yani
+     bu filtre burada nadiren devreye giriyor — camurlu yolu
+     ELEYEMIYORUZ, cunku camurlu oldugu veride yazmiyor.
+
+     Yine de var olan bilgiyi kullanmamak sacma; etiketi olan yol
+     eleniyor, olmayan "bilinmiyor" sayilip gecirilıyor. Asil
+     koruma sinif elemesi ve yol yogunlugu.
+     ------------------------------------------------------------ */
+  KOTU_YUZEY: {
+    unpaved: 1, gravel: 1, fine_gravel: 1, dirt: 1, earth: 1, ground: 1,
+    mud: 1, sand: 1, grass: 1, pebblestone: 1, woodchips: 1, compacted: 1
+  },
+  KAPALI_ERISIM: { private: 1, no: 1, customers: 1, permit: 1, delivery: 1, agricultural: 1, forestry: 1 },
+
+  /* Yol surulebilir mi? Donen: null (sorun yok) ya da eleme sebebi */
+  eleSebebi(y, mahalleDahil) {
+    if (!mahalleDahil && this.MAHALLE_SINIFI[y.tur]) return 'mahalle';
+    if (y.tur === 'track') return 'toprak';
+    if (y.yuzey && this.KOTU_YUZEY[y.yuzey]) return 'yuzey';
+    if (y.izTuru && y.izTuru !== 'grade1') return 'yuzey';
+    if (y.erisim && this.KAPALI_ERISIM[y.erisim]) return 'kapali';
+    if (y.motorlu && this.KAPALI_ERISIM[y.motorlu]) return 'kapali';
+    if (y.motorlu === 'no') return 'kapali';
+    if (y.bariyer && y.bariyer !== 'no') return 'kapali';
+    return null;
   },
 
   sonuc: [],
@@ -150,6 +203,50 @@ const Touge = {
       g.set(a, (g.get(a) || 0) + 1);
     }
     return g;
+  },
+
+  /* ------------------------------------------------------------
+     YOL YOGUNLUGU — izbeligin asil olcusu
+     ------------------------------------------------------------
+     Bina yogunlugu tek basina yaniltiyor: Turkiye'de kirsal
+     yerlesimlerin binalari OSM'e buyuk olcude girilmemis. Olculdu
+     (8 Eylul 2026, Sile 4 km): 1138 yolun hepsinde "70 m icinde
+     bina yok" cikiyordu — bina OLMADIGI icin degil, bina VERISI
+     olmadigi icin. Bu, projedeki eski "yukseklik yoksa 0 donme"
+     tuzaginin aynisi: verinin yoklugunu "bos arazi" diye okumak.
+
+     Yollar ise her zaman haritada. Bir koy sokagi baska sokaklarin
+     arasindadir; kir yolunun cevresinde yol yoktur. Kilometrekareye
+     dusen YOL UZUNLUGU bu ikisini ayiriyor ve bina verisine hic
+     bagli degil.
+     ------------------------------------------------------------ */
+  yolIzgarasi(yollar) {
+    const H = this.IZBE_HUCRE, g = new Map();
+    for (const y of yollar) {
+      const n = y.nokta;
+      for (let i = 1; i < n.length; i++) {
+        const a = n[i - 1], b = n[i];
+        const u = Math.hypot(b.x - a.x, b.y - a.y);
+        if (!u) continue;
+        /* Parcayi ortasindaki hucreye yaz. Hucre 200 m, yol parcalari
+           genelde daha kisa; uzun parcalari bolmek gereksiz hassasiyet. */
+        const k = Math.floor((a.x + b.x) / 2 / H) + ',' + Math.floor((a.y + b.y) / 2 / H);
+        g.set(k, (g.get(k) || 0) + u);
+      }
+    }
+    return g;
+  },
+
+  /* Nokta cevresindeki yol yogunlugu (km yol / km2) */
+  yolYogunlugu(g, x, y) {
+    const H = this.IZBE_HUCRE;
+    const i = Math.floor(x / H), j = Math.floor(y / H);
+    let m = 0;
+    for (let a = i - 1; a <= i + 1; a++) {
+      for (let b = j - 1; b <= j + 1; b++) m += (g.get(a + ',' + b) || 0);
+    }
+    const km2 = (3 * H) * (3 * H) / 1e6;
+    return (m / 1000) / km2;
   },
 
   /* Nokta cevresindeki bina yogunlugu (bina / km2) */
@@ -248,7 +345,7 @@ const Touge = {
      Ek olarak kavsak noktasinda BIRDEN COK aday varsa
      birlestirme yapilmiyor: hangi kola devam edecegi belirsiz.
      ------------------------------------------------------------ */
-  zincirle(yollar) {
+  zincirle(yollar, mahalleDahil) {
     const uc = new Map();            // dugum id -> o dugumde biten yollar
     const ekle = (nid, y) => {
       let d = uc.get(nid);
@@ -327,8 +424,17 @@ const Touge = {
         if (p.serit != null) serit = (serit == null) ? p.serit : Math.min(serit, p.serit);
       }
 
+      /* Zincirin HERHANGI bir parcasi surulemezse zincir surulemez:
+         yolun 200 m'si ozel mulkse ya da toprakas o yoldan gecemezsin.
+         Ilk bulunan sebep saklaniyor, sayimda o gorunsun diye. */
+      let sorun = null;
+      for (const p of parcalar) {
+        const s = this.eleSebebi(p, mahalleDahil);
+        if (s) { sorun = s; break; }
+      }
+
       zincirler.push({
-        ad: bas.ad, tur: bas.tur, sinif: bas.sinif,
+        ad: bas.ad, tur: bas.tur, sinif: bas.sinif, sorun: sorun,
         genislik: genislik, serit: serit,
         parca: parcalar.length, dugum: dugum, nokta: nokta
       });
@@ -424,12 +530,13 @@ const Touge = {
        darlik     : yolun kaci DAR_ESIK icinde bina dibinden geciyor
        Ikisi ayri cunku bir yol yer yer bina dibinden gecip sonra
        acikliga cikabilir; ortalama bunu gizler, darlik gizlemez. */
-    let mesafeToplam = 0, dar = 0, yogToplam = 0;
+    let mesafeToplam = 0, dar = 0, yogToplam = 0, yolYogToplam = 0;
     for (const p of o) {
       const u = this.binaMesafesi(izgara, p.x, p.y, this.BINA_YARICAP);
       mesafeToplam += u;
       if (u < this.DAR_ESIK) dar++;
       if (this.izbeG) yogToplam += this.yogunluk(this.izbeG, p.x, p.y);
+      if (this.yolG) yolYogToplam += this.yolYogunlugu(this.yolG, p.x, p.y);
     }
     const binaMesafe = o.length ? mesafeToplam / o.length : this.BINA_YARICAP;
     const darlik = o.length ? dar / o.length : 0;
@@ -437,12 +544,14 @@ const Touge = {
        cikip kira giriyorsa ortalama ikisinin arasinda kaliyor —
        dogrusu bu, yolun yarisi sehirdeyse yari kirsal sayilmali. */
     const binaYogunluk = o.length ? yogToplam / o.length : 0;
+    const yolYogunluk = o.length ? yolYogToplam / o.length : 0;
 
     return {
       uzunluk: uzunluk, kusUcusu: kusUcusu, kivrim: kivrim,
       donusPerKm: donusPerKm, rakimAralik: rakimAralik, rakimKazanc: rakimKazanc,
       kavsakPerKm: kavsakPerKm, binaMesafe: binaMesafe, darlik: darlik,
-      binaYogunluk: binaYogunluk, manzara: manzara, ornek: o
+      binaYogunluk: binaYogunluk, yolYogunluk: yolYogunluk,
+      manzara: manzara, ornek: o
     };
   },
 
@@ -681,7 +790,8 @@ const Touge = {
      ANA GIRIS
      kaynak verilmezse ekranda yuklu karolardan toplanir.
      ------------------------------------------------------------ */
-  bul(tur, enFazla, kaynak) {
+  bul(tur, enFazla, kaynak, secenek) {
+    const mahalleDahil = !!(secenek && secenek.mahalleDahil);
     const t0 = performance.now();
     kaynak = kaynak || this.kaynakTopla();
     const yollar = kaynak.yollar;
@@ -690,6 +800,7 @@ const Touge = {
     const binalar = kaynak.binalar;
     const izgara = this.binaIzgarasi(binalar.kose);
     this.izbeG = this.izbeIzgarasi(binalar.merkez);
+    this.yolG = this.yolIzgarasi(yollar);
     this.suIzgara = this.binaIzgarasi(kaynak.sular);
 
     /* KAVSAK SAYIMI YOLLARDAN, GRAFIKTEN DEGIL.
@@ -709,12 +820,18 @@ const Touge = {
        terimi devre disi. Sessizce 0 saymak "her yer duz" demek olurdu. */
     const rakimVar = !!Arazi.hazir;
 
-    const zincirler = this.zincirle(yollar);
+    const zincirler = this.zincirle(yollar, mahalleDahil);
     const turler = (tur === 'ikisi') ? ['viraj', 'duz'] : [tur];
     const bulunan = [];
 
     let darEle = 0;
+    const eleme = { mahalle: 0, toprak: 0, yuzey: 0, kapali: 0 };
     for (const z of zincirler) {
+      /* Surulemez yollar: mahalle sokagi, toprak yol, kapali gecis.
+         Zincirin HERHANGI bir parcasi sorunluysa zincir eleniyor —
+         yolun 200 m'si ozel mulk ise o yoldan gecemezsin. */
+      if (z.sorun) { eleme[z.sorun] = (eleme[z.sorun] || 0) + 1; continue; }
+
       /* OSM'de genislik acikca yaziyorsa tahmine gerek yok. Bu etiket
          her yolda yok ama varsa en guvenilir sinyal. */
       if (z.genislik != null && z.genislik < this.ENAZ_GENISLIK) { darEle++; continue; }
@@ -742,7 +859,7 @@ const Touge = {
     this.sonuc = bulunan.slice(0, enFazla || 8);
     return {
       sonuc: this.sonuc, toplam: bulunan.length, kesilen: kesilen,
-      darEle: darEle, zincir: zincirler.length, yol: yollar.length,
+      darEle: darEle, eleme: eleme, zincir: zincirler.length, yol: yollar.length,
       rakimVar: rakimVar, ms: performance.now() - t0
     };
   },

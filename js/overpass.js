@@ -462,6 +462,14 @@ const Ayristirici = {
           en: st.en, hiz: st.hiz, sinif: st.sinif,
           genislik: isFinite(gen) ? gen : null,
           serit: isFinite(ser) ? ser : null,
+          /* Yuzey ve erisim: touge bulucu bunlarla camurlu ve kapali
+             yollari eliyor. Etiketler her yolda yok; olmayanlar
+             "bilinmiyor" (null) olarak geciyor, "iyi" olarak degil. */
+          yuzey: t.surface || null,
+          izTuru: t.tracktype || null,
+          erisim: t.access || null,
+          motorlu: t.motor_vehicle || t.motorcar || t.vehicle || null,
+          bariyer: t.barrier || null,
           tekYon: (t.oneway === 'yes' || t.oneway === '1' || t.oneway === 'true'),
           tersYon: (t.oneway === '-1'),
           kopru: !!t.bridge, tunel: !!t.tunnel
