@@ -673,10 +673,40 @@ const Touge = {
      ============================================================ */
   ENCOK_BLOK: 40,
 
+  /* ------------------------------------------------------------
+     PARTI BOYU — 4x4 DENENDI, GERI ALINDI
+     ------------------------------------------------------------
+     Tarama yavas ve darbogaz Overpass sorgu suresi. Sorgu suresinin
+     alandan bagimsiz oldugu izlenimi vardi, oyleyse daha buyuk
+     parti = daha az sorgu = daha hizli olurdu. Olculdu ve OYLE
+     CIKMADI. Olcumler (8 Eylul 2026):
+
+       tek sorgu, ayni bolge:
+         2x2 (3.7 km, 439 KB) 23.0 sn  ->  4x4 (7.4 km, 580 KB) 25.9 sn
+       ucdan uca, ayni soguk bolge, 4x4 ONCE:
+         4x4  6 blok  128.6 sn
+         2x2 12 blok   33.0 sn   (Overpass bolgeyi isittiktan sonra)
+
+     Iki olcum de KIRLI: hangisi once kosarsa Overpass o bolgeyi
+     isitiyor ve ikinciyi haksiz hizlandiriyor. Ilk denemede
+     "2.6 kat hizlandi" cikmisti ama ikinci bolge neredeyse bostu
+     (56 yol) — o da kirliydi.
+
+     Elde kalan: 6 blokluk 4x4 taramasi 5'li es zamanli kumede
+     2 turda bitmeliyken 128 sn surdu, yani buyuk sorgular tek tek
+     COK daha yavas. Kazanc kanitlanamadi, zarar ihtimali var.
+     Parti 2x2'de kaldi.
+
+     Gercekten bilinen: onbellek sicakken ayni tarama 322 ms
+     indirme + 81 ms tarama = ~0.4 sn. Yavasligin tamami soguk
+     Overpass sorgusu.
+     ------------------------------------------------------------ */
+  TARAMA_PARTI: [2, 2],
+
   async bolgeVerisi(lat, lon, km, ilerleme) {
     const seviye = 'mahalle';
     const z = Overpass.DETAY[seviye].karoZoom;
-    const p = Overpass.DETAY[seviye].parti || [2, 2];
+    const p = this.TARAMA_PARTI;
 
     /* Yaricapi enlem/boylam farkina cevir. Boylam kutuplara gidildikce
        kisaldigi icin cos(enlem) ile bolunuyor. */
@@ -728,17 +758,20 @@ const Touge = {
     for (let i = 0; i < bloklar.length; i += kume) {
       const parca = bloklar.slice(i, i + kume);
       await Promise.all(parca.map(async (g) => {
-        let mg = Infinity, mb = Infinity, mk = -Infinity, md = -Infinity;
-        for (const t of g) {
-          const kk = Karolar.karoKutusu(t.z, t.x, t.y);
-          if (kk[0] < mg) mg = kk[0];
-          if (kk[1] < mb) mb = kk[1];
-          if (kk[2] > mk) mk = kk[2];
-          if (kk[3] > md) md = kk[3];
-        }
-        try {
-          const ham = await Overpass.indirKutu([mg, mb, mk, md], seviye, null);
-          const s = await Ayristirici.ayristirBolerek(ham);
+        /* Karo kumesini tek kutuya cevir */
+        const kutula = (karolar) => {
+          let mg = Infinity, mb = Infinity, mk = -Infinity, md = -Infinity;
+          for (const t of karolar) {
+            const kk = Karolar.karoKutusu(t.z, t.x, t.y);
+            if (kk[0] < mg) mg = kk[0];
+            if (kk[1] < mb) mb = kk[1];
+            if (kk[2] > mk) mk = kk[2];
+            if (kk[3] > md) md = kk[3];
+          }
+          return [mg, mb, mk, md];
+        };
+
+        const topla = (s) => {
           for (const y of s.yollar) if (!yolG.has(y.id)) yolG.set(y.id, y);
           for (const b of s.binalar) if (!binaG.has(b.id)) binaG.set(b.id, b);
           for (const c of s.kiyi) {
@@ -751,13 +784,37 @@ const Touge = {
             suGorulen.add('a' + a.id);
             for (const q of a.nokta) suG.push(q);
           }
+        };
+
+        try {
+          topla(await Ayristirici.ayristirBolerek(
+            await Overpass.indirKutu(kutula(g), seviye, null)));
         } catch (e) {
-          /* Tek blogun dusmesi taramayi bitirmemeli: 20 blokluk bir
-             aramada biri 504 verirse geri kalani yine ise yarar.
-             Kac blogun dustugu sonucta yaziliyor, sessizce eksik
-             sonuc dondurmuyoruz. */
-          basarisiz++;
-          console.warn('[touge] blok inmedi:', (e && e.message) || e);
+          /* Buyuk parti dustu — yogun sehirde 4x4 sunucuyu zaman
+             asimina dusurebiliyor. Blogu 2x2'lere bolup tekrar dene:
+             kucuk sorgular geciyor, tarama komple durmuyor. */
+          console.warn('[touge] 4x4 blok inmedi, 2x2 bolunuyor:', (e && e.message) || e);
+          const alt = new Map();
+          for (const t of g) {
+            const ak = Math.floor(t.x / 2) + ',' + Math.floor(t.y / 2);
+            let d = alt.get(ak);
+            if (!d) { d = []; alt.set(ak, d); }
+            d.push(t);
+          }
+          let altHata = 0;
+          for (const d of alt.values()) {
+            try {
+              topla(await Ayristirici.ayristirBolerek(
+                await Overpass.indirKutu(kutula(d), seviye, null)));
+            } catch (e2) {
+              altHata++;
+              console.warn('[touge] alt blok da inmedi:', (e2 && e2.message) || e2);
+            }
+          }
+          /* Alt bloklarin HEPSI dustuyse blok gercekten inmedi.
+             Bir kismi indiyse veri eksik ama kullanilabilir —
+             yine de sayilıyor ki kullanici eksigi bilsin. */
+          if (altHata) basarisiz++;
         }
         bitti++;
         if (ilerleme) ilerleme(bitti, bloklar.length, basarisiz);
