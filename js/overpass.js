@@ -451,10 +451,17 @@ const Ayristirici = {
 
       if (t.highway) {
         const st = this.stilBul(t.highway);
+        /* width ve lanes her yolda yok ama VARSA dar sokagi dogrudan
+           soyluyor, tahmine gerek kalmiyor. width "3.5" ya da "3.5 m"
+           gelebiliyor; parseFloat birimi kendiliginden atiyor. */
+        const gen = parseFloat(t.width);
+        const ser = parseInt(t.lanes, 10);
         yollar.push({
           id: e.id, nokta: nokta, dugum: e.nodes,
           tur: t.highway, ad: t.name || '',
           en: st.en, hiz: st.hiz, sinif: st.sinif,
+          genislik: isFinite(gen) ? gen : null,
+          serit: isFinite(ser) ? ser : null,
           tekYon: (t.oneway === 'yes' || t.oneway === '1' || t.oneway === 'true'),
           tersYon: (t.oneway === '-1'),
           kopru: !!t.bridge, tunel: !!t.tunnel

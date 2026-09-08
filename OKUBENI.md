@@ -422,12 +422,26 @@ olmamasi. Ana arter ne kadar guzel olursa olsun touge degil.
    gurultusu sahte viraj uretiyor. Once 25 m'de bir yeniden ornekleniyor.
 
 3. **Olcumler:** km basina donus (derece), kus ucusuna oran, rakim araligi,
-   km basina kavsak, km basina bina, suya yakinlik orani.
+   km basina kavsak, **en yakin binaya ortalama mesafe**, **bina dibinden
+   gecme orani**, suya yakinlik orani.
+
+   Bina olcumu SAYIM degil MESAFE, ve bina MERKEZLERINE degil KOSELERINE
+   bakiyor. Sayim yaniltiyordu: yol dibinde duran birkac bina ile uzakta
+   duran yuzlerce bina ayni puani aliyordu. Merkez de yaniltiyordu: dar
+   sokakta duvar 3 m otededir ama binanin merkezi 20 m otede olabilir.
 
 4. **Puanlama.** Agirlikli ortalama, carpim degil: carpimda tek sifir her seyi
    siler, oysa rakimsiz ama cok kivrimli issiz bir yol da iyi yoldur.
 
 ### Elemeler
+
+- **Dar sokaklar (bina aralari):** yolun %40'indan fazlasi bina dibinden
+  geciyorsa (en yakin bina kosesi 12 m'den yakin) eleniyor. Ne kadar kivrimli
+  olursa olsun iki sira bina arasindaki sokak surulecek yol degil. OSM'de
+  `width` etiketi acikca 4.5 m'den az yaziyorsa da dogrudan eleniyor (bu etiket
+  her yolda yok ama varsa en guvenilir sinyal).
+  Olculdu: Beylikduzu'nde 2191 zincirin **120'si** bu yuzden elendi,
+  Buyukcekmece kirsalinda **0** — filtre sehirde calisip kirda susuyor.
 
 - **Halka ve cikmaz:** kus ucusuna oran 3.2'yi asarsa ya da bastan sona 300 m
   bile ilerlemiyorsa atiliyor. Sebep olculdu: Buyukcekmece'de `kivrim 28.47`

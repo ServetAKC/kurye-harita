@@ -64,25 +64,36 @@ const YERLER = [
 
     for (const tur of ['viraj', 'duz']) {
       const c = await ev('JSON.stringify((function(){var c=Touge.bul("' + tur + '",5);' +
-        'return {toplam:c.toplam,ms:c.ms,zincir:c.zincir,rakimVar:c.rakimVar,' +
+        'return {toplam:c.toplam,ms:c.ms,zincir:c.zincir,darEle:c.darEle,rakimVar:c.rakimVar,' +
         'liste:(c.sonuc||[]).map(function(y){return {ad:y.ad,tur:y.yolTuru,parca:y.parca,' +
         'km:+(y.olcum.uzunluk/1000).toFixed(2),donus:Math.round(y.olcum.donusPerKm),' +
         'kivrim:+y.olcum.kivrim.toFixed(3),rakim:Math.round(y.olcum.rakimAralik),' +
-        'kavsak:Math.round(y.olcum.kavsakPerKm),bina:Math.round(y.olcum.binaPerKm),' +
+        'kavsak:Math.round(y.olcum.kavsakPerKm),bina:Math.round(y.olcum.binaMesafe),' +
+        'darlik:+y.olcum.darlik.toFixed(2),gen:y.genislik,' +
         'manzara:+y.olcum.manzara.toFixed(2),' +
         'puan:+y.puan.toFixed(3)};})};})())');
       const r = JSON.parse(c);
       console.log('\n--- ' + tur.toUpperCase() + '  (' + r.toplam + ' aday, ' +
-                  r.zincir + ' zincir, ' + Math.round(r.ms) + ' ms)');
+                  r.zincir + ' zincir, ' + r.darEle + ' dar elendi, ' + Math.round(r.ms) + ' ms)');
       if (!r.liste.length) { console.log('    sonuc yok'); continue; }
       for (const y of r.liste) {
         console.log('  ' + y.puan.toFixed(2) + '  ' + y.km + ' km  ' +
                     String(y.donus).padStart(4) + '°/km  kivrim ' + y.kivrim.toFixed(2) +
                     '  rakim ' + String(y.rakim).padStart(3) + ' m  ' +
                     String(y.kavsak).padStart(2) + ' kavsak/km  ' +
-                    String(y.bina).padStart(3) + ' bina/km  su ' + y.manzara.toFixed(2) + '  ' +
+                    String(y.bina).padStart(2) + ' m bina  dib %' + String(Math.round(y.darlik*100)).padStart(2) + '  su ' + y.manzara.toFixed(2) + '  ' +
                     y.tur + '  ' + y.ad.slice(0, 34));
       }
+      /* Dar sokak elemesi: sonuclarin HICBIRI bina dibinden gecmemeli.
+         Ayrica sehir icinde filtrenin gercekten calismasi lazim —
+         0 eleme, filtrenin bagli olmadigi anlamina gelir. */
+      const dib = r.liste.filter(y => y.darlik > 0.40);
+      if (dib.length) { console.log('    X ' + dib.length + ' sonuc bina dibinden geciyor'); hata.push(yer.ad + '/' + tur + '/dar'); }
+      if (/sehir ici/.test(yer.ad) && r.darEle === 0) {
+        console.log('    X sehir icinde hic dar sokak elenmedi — filtre calismiyor olabilir');
+        hata.push(yer.ad + '/' + tur + '/eleme-yok');
+      }
+
       /* Bu tur icin beklenen ozellik gercekten saglaniyor mu? */
       if (tur === 'viraj') {
         const ort = r.liste.reduce((s, y) => s + y.donus, 0) / r.liste.length;

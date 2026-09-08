@@ -817,6 +817,7 @@ const Uyg = {
       this.tougeYaz(c);
       Cizer.kirlet();
       this.durum(c.toplam + ' aday · ' + c.zincir + ' zincir (' + c.yol + ' yol parcasi) · ' +
+                 (c.darEle ? c.darEle + ' dar sokak elendi · ' : '') +
                  c.ms.toFixed(0) + ' ms' +
                  (c.rakimVar ? '' : '  ·  arazi kapali, rakim hesaba katilmadi'),
                  c.sonuc.length ? 'iyi' : 'uyari');
@@ -846,11 +847,15 @@ const Uyg = {
         ? Math.round(y.olcum.donusPerKm) + '°/km · ' + Math.round(y.olcum.rakimAralik) + ' m rakim'
         : 'kivrim ' + y.olcum.kivrim.toFixed(2);
       a.textContent = y.ad + '  ·  ' + km + ' km · ' + ek;
-      a.title = y.ad + '\n' + y.yolTuru + ' · ' + y.parca + ' parca\n' +
+      a.title = y.ad + '\n' + y.yolTuru + ' · ' + y.parca + ' parca' +
+                (y.genislik != null ? ' · ' + y.genislik + ' m genis' : '') +
+                (y.serit != null ? ' · ' + y.serit + ' serit' : '') + '\n' +
                 'puan ' + y.puan.toFixed(2) + ' · nis ' + y.nis.toFixed(2) +
                 ' · trafik ' + y.trafik.toFixed(2) + '\n' +
                 Math.round(y.olcum.kavsakPerKm) + ' kavsak/km · ' +
-                Math.round(y.olcum.binaPerKm) + ' bina/km';
+                'bina ort. ' + Math.round(y.olcum.binaMesafe) + ' m · ' +
+                'bina dibi %' + Math.round(y.olcum.darlik * 100) +
+                (y.olcum.manzara > 0.05 ? ' · su %' + Math.round(y.olcum.manzara * 100) : '');
       const p = document.createElement('b');
       p.className = 'poiSayi';
       p.textContent = y.puan.toFixed(2);

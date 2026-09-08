@@ -40,7 +40,15 @@ const Touge = {
   ORNEK_ARALIK: 25,        // metre — aci olcumu icin yeniden ornekleme
   ENAZ_UZUNLUK_VIRAJ: 700,
   ENAZ_UZUNLUK_DUZ: 1200,
-  BINA_YARICAP: 70,        // metre — bu kadar yakindaki bina "kenarinda ev var"
+  BINA_YARICAP: 70,        // metre — bina aramasinin ust siniri
+  /* Bina kosesi bu kadar yakinsa yol bina dibinden geciyor demek.
+     12 m: iki sira bina arasindaki tipik sokak genisligi kaldirimla
+     birlikte 8-14 m; acik yolda en yakin bina 25 m+ oteye duser. */
+  DAR_ESIK: 12,
+  /* Yolun bu kadari bina dibindense DAR SOKAK sayilip eleniyor. */
+  ENCOK_DARLIK: 0.40,
+  /* OSM'de acikca yazan genislik bunun altindaysa dogrudan eleniyor. */
+  ENAZ_GENISLIK: 4.5,
   SU_YARICAP: 180,         // metre — bu kadar yakinsa "sahil yolu"
   /* Kus ucusuna oran bunu asarsa yol baslangicina donuyor demektir:
      site ici halka, kavsak dongusu, cikmaz. Surulecek yol degil.
@@ -88,27 +96,31 @@ const Touge = {
     return liste;
   },
 
+  /* Bina KOSE noktalari, merkezleri degil.
+     Dar sokakta duvar 3 m otededir ama binanin merkezi 20 m otede
+     olabilir; merkeze bakan olcum dar sokagi genis sanir. Kullanici
+     "binalarin aralarini, dar sokaklari ele" dedi — ele almak icin
+     once dogru mesafeyi olcmek gerekiyor. */
   binalariTopla() {
     const gorulen = new Set();
-    const merkez = [];
+    const kose = [];
     for (const k of Karolar.depo.values()) {
       if (!k.blok || !k.blok.sekil) continue;
       for (const b of k.blok.sekil.binalar) {
         if (gorulen.has(b.id)) continue;
         gorulen.add(b.id);
         if (!b.nokta || !b.nokta.length) continue;
-        let sx = 0, sy = 0;
-        for (const p of b.nokta) { sx += p.x; sy += p.y; }
-        merkez.push({ x: sx / b.nokta.length, y: sy / b.nokta.length });
+        for (const p of b.nokta) kose.push({ x: p.x, y: p.y });
       }
     }
-    return merkez;
+    return kose;
   },
 
-  /* Bina merkezlerini 100 m'lik hucrelere at: her ornek nokta icin
-     butun binalari taramak yerine 9 hucreye bakmak yetiyor. */
+  /* Noktalari hucrelere at: her ornek nokta icin butun binalari
+     taramak yerine birkac hucreye bakmak yetiyor. 50 m hucre, cunku
+     sorulan yaricap 12-70 m arasi. */
   binaIzgarasi(merkezler) {
-    const H = 100, g = new Map();
+    const H = 50, g = new Map();
     for (const m of merkezler) {
       const a = Math.floor(m.x / H) + ',' + Math.floor(m.y / H);
       let d = g.get(a);
@@ -160,23 +172,25 @@ const Touge = {
     return false;
   },
 
-  binaSay(izgara, x, y, yaricap) {
+  /* En yakin bina kosesine uzaklik. Bulunamazsa `enCok` donuyor —
+     "cok uzakta" ile "hic yok" ayni sey sayiliyor, dogrusu bu. */
+  binaMesafesi(izgara, x, y, enCok) {
     const H = izgara.H;
-    const i0 = Math.floor((x - yaricap) / H), i1 = Math.floor((x + yaricap) / H);
-    const j0 = Math.floor((y - yaricap) / H), j1 = Math.floor((y + yaricap) / H);
-    const r2 = yaricap * yaricap;
-    let n = 0;
+    const i0 = Math.floor((x - enCok) / H), i1 = Math.floor((x + enCok) / H);
+    const j0 = Math.floor((y - enCok) / H), j1 = Math.floor((y + enCok) / H);
+    let en2 = enCok * enCok;
     for (let i = i0; i <= i1; i++) {
       for (let j = j0; j <= j1; j++) {
         const d = izgara.g.get(i + ',' + j);
         if (!d) continue;
         for (const m of d) {
           const dx = m.x - x, dy = m.y - y;
-          if (dx * dx + dy * dy <= r2) n++;
+          const u = dx * dx + dy * dy;
+          if (u < en2) en2 = u;
         }
       }
     }
-    return n;
+    return Math.sqrt(en2);
   },
 
   /* ------------------------------------------------------------
@@ -256,8 +270,18 @@ const Touge = {
         }
       }
 
+      /* Zincirin genisligi EN DAR parcasi kadardir: yolun bir yeri
+         3 m ise oradan gecmek zorundasin. Etiketi olmayan parcalar
+         hesaba katilmiyor (null), hepsi etiketsizse sonuc da null. */
+      let genislik = null, serit = null;
+      for (const p of parcalar) {
+        if (p.genislik != null) genislik = (genislik == null) ? p.genislik : Math.min(genislik, p.genislik);
+        if (p.serit != null) serit = (serit == null) ? p.serit : Math.min(serit, p.serit);
+      }
+
       zincirler.push({
         ad: bas.ad, tur: bas.tur, sinif: bas.sinif,
+        genislik: genislik, serit: serit,
         parca: parcalar.length, dugum: dugum, nokta: nokta
       });
     }
@@ -347,15 +371,25 @@ const Touge = {
     }
     const manzara = o.length ? suYakin / o.length : 0;
 
-    /* Kenarinda ev var mi: ornek noktalarin yaninda bina sayisi */
-    let bina = 0;
-    for (const p of o) bina += this.binaSay(izgara, p.x, p.y, this.BINA_YARICAP);
-    const binaPerKm = bina / (uzunluk / 1000);
+    /* Kenarinda ev var mi — iki ayri sey olculuyor:
+       binaMesafe : ortalama olarak binalar kac metre otede
+       darlik     : yolun kaci DAR_ESIK icinde bina dibinden geciyor
+       Ikisi ayri cunku bir yol yer yer bina dibinden gecip sonra
+       acikliga cikabilir; ortalama bunu gizler, darlik gizlemez. */
+    let mesafeToplam = 0, dar = 0;
+    for (const p of o) {
+      const u = this.binaMesafesi(izgara, p.x, p.y, this.BINA_YARICAP);
+      mesafeToplam += u;
+      if (u < this.DAR_ESIK) dar++;
+    }
+    const binaMesafe = o.length ? mesafeToplam / o.length : this.BINA_YARICAP;
+    const darlik = o.length ? dar / o.length : 0;
 
     return {
       uzunluk: uzunluk, kusUcusu: kusUcusu, kivrim: kivrim,
       donusPerKm: donusPerKm, rakimAralik: rakimAralik, rakimKazanc: rakimKazanc,
-      kavsakPerKm: kavsakPerKm, binaPerKm: binaPerKm, manzara: manzara, ornek: o
+      kavsakPerKm: kavsakPerKm, binaMesafe: binaMesafe, darlik: darlik,
+      manzara: manzara, ornek: o
     };
   },
 
@@ -369,16 +403,26 @@ const Touge = {
     const kirp = (v) => Math.max(0, Math.min(1, v));
 
     const trafik = this.trafikCarpani(tur);
-    /* Nis olma: az kavsak + az ev. 12 kavsak/km sehir ici demek,
-       200 bina/km yol boyunca sirali evler demek. */
+    /* Nis olma: az kavsak + binalardan uzak. 12 kavsak/km sehir ici
+       demek. Bina terimi artik SAYI degil MESAFE: 40 m ve otesi tam
+       puan, 10 m'de sifira yakin. Sayim yaniltiyordu — seyrek ama
+       yol dibinde duran birkac bina ile uzakta duran yuzlerce bina
+       ayni puani aliyordu. */
     const kavsakP = kirp(1 - m.kavsakPerKm / 12);
-    const binaP = kirp(1 - m.binaPerKm / 200);
-    const nis = 0.5 * kavsakP + 0.5 * binaP;
+    const binaP = kirp((m.binaMesafe - 10) / 30);
+    const nis = 0.45 * kavsakP + 0.55 * binaP;
 
     /* Halka / cikmaz elemesi: her iki tur icin de gecerli.
        Basladigi yere donen yol surulecek yol degil. */
     if (m.kivrim > this.ENCOK_KIVRIM) return null;
     if (m.kusUcusu < this.ENAZ_KUS_UCUSU) return null;
+
+    /* DAR SOKAK ELEMESI — kullanicinin istegi: "binalarin aralarini,
+       dar sokaklari ele". Yolun %40'indan fazlasi bina dibinden
+       geciyorsa (en yakin bina 12 m'den yakin) burasi iki sira bina
+       arasindaki sokaktir; ne kadar kivrimli olursa olsun surulecek
+       yol degil. */
+    if (m.darlik > this.ENCOK_DARLIK) return null;
 
     if (tur === 'viraj') {
       if (m.uzunluk < this.ENAZ_UZUNLUK_VIRAJ) return null;
@@ -450,9 +494,15 @@ const Touge = {
     const turler = (tur === 'ikisi') ? ['viraj', 'duz'] : [tur];
     const bulunan = [];
 
+    let darEle = 0;
     for (const z of zincirler) {
+      /* OSM'de genislik acikca yaziyorsa tahmine gerek yok. Bu etiket
+         her yolda yok ama varsa en guvenilir sinyal. */
+      if (z.genislik != null && z.genislik < this.ENAZ_GENISLIK) { darEle++; continue; }
+
       const m = this.olc(z, izgara, kavsakMi, rakimVar);
       if (!m) continue;
+      if (m.darlik > this.ENCOK_DARLIK) darEle++;
       for (const t of turler) {
         const p = this.puanla(m, t === 'viraj' ? 'viraj' : 'duz', rakimVar);
         if (!p) continue;
@@ -462,6 +512,7 @@ const Touge = {
         if (p.puan < 0.35) continue;
         bulunan.push({
           tur: t, ad: z.ad || '(isimsiz ' + z.tur + ')', yolTuru: z.tur,
+          genislik: z.genislik, serit: z.serit,
           parca: z.parca, nokta: z.nokta, olcum: m, ...p
         });
       }
@@ -472,7 +523,7 @@ const Touge = {
     this.sonuc = bulunan.slice(0, enFazla || 8);
     return {
       sonuc: this.sonuc, toplam: bulunan.length, kesilen: kesilen,
-      zincir: zincirler.length, yol: yollar.length,
+      darEle: darEle, zincir: zincirler.length, yol: yollar.length,
       rakimVar: rakimVar, ms: performance.now() - t0
     };
   },
