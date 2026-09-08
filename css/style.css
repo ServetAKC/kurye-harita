@@ -149,3 +149,40 @@ main { flex: 1; position: relative; min-width: 0; }
   font: 11px ui-monospace, Consolas, monospace; color: var(--soluk);
   pointer-events: none;
 }
+
+/* --- Abartma on ayarlari --- */
+.onayar { gap: 4px; }
+.onayar button {
+  flex: 1; padding: 5px 2px; font-size: 11px;
+}
+.onayar button.aktif {
+  border-color: var(--vurgu); color: var(--vurgu); background: #10222c;
+}
+
+/* --- Durak koyma: adres onerileri ve durak listesi --- */
+#konumOneri { max-height: 150px; overflow-y: auto; }
+#duraklarListe { max-height: 160px; overflow-y: auto; }
+.durakSatir {
+  display: flex; align-items: center; gap: 6px;
+  padding: 2px 0; line-height: 1.5;
+}
+.durakSatir .no {
+  flex: 0 0 20px; text-align: center; border-radius: 3px;
+  background: #1d2b3a; color: var(--yazi); font-size: 10px;
+}
+.durakSatir .no.sube { background: #14532d; color: #bbf7d0; }
+.durakSatir .ad { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.durakSatir .sil {
+  flex: 0 0 auto; padding: 0 5px; font-size: 11px; line-height: 1.6;
+  background: none; border: 1px solid #2b3a4d; color: var(--soluk);
+}
+.durakSatir .sil:hover { border-color: #f43f5e; color: #fbb6c2; }
+
+/* --- Tiklayarak koyma: ikinci plana alindi --- */
+.ekstra { margin-bottom: 8px; }
+.ekstra summary {
+  cursor: pointer; color: var(--soluk); font-size: 11px;
+  padding: 3px 0; user-select: none;
+}
+.ekstra summary:hover { color: var(--yazi); }
+.ekstra .modlar { margin-top: 5px; }

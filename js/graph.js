@@ -227,6 +227,57 @@ const Grafik = {
     return null;   // ulasilamiyor
   },
 
+  /* ----------------------------------------------------------
+     TEK KAYNAKTAN COK HEDEFE MALIYET  (Dijkstra)
+     ----------------------------------------------------------
+     Teslimat sirasini kus ucusuna gore secmek Buyukcekmece gibi
+     yerlerde yaniltiyor: golun iki yakasi kus ucusu 1 km, yoldan
+     9 km. Sira GERCEK yol maliyetine gore kurulmali.
+
+     n durak icin n^2 A* yerine durak basina TEK tarama yetiyor:
+     bir Dijkstra o duraktan butun hedeflere olan maliyeti birden
+     verir. Butun hedefler kapaninca tarama biter, yani grafigin
+     tamami gezilmez — pratikte duraklari cevreleyen bolge kadar.
+
+     A* degil Dijkstra: A*'in kus ucusu tahmini TEK hedefe gore
+     kurulur, cok hedefte hepsini birden yonlendiremez.
+     ---------------------------------------------------------- */
+  maliyetler(baslangicId, hedefIdler, olcut) {
+    olcut = olcut || 'uzunluk';
+    const D = this.dugumler;
+    const sonuc = new Map();
+    if (!D || !D.has(baslangicId)) return sonuc;
+
+    const bekleyen = new Set();
+    for (const h of hedefIdler) if (D.has(h)) bekleyen.add(h);
+    if (bekleyen.has(baslangicId)) { sonuc.set(baslangicId, 0); bekleyen.delete(baslangicId); }
+    if (!bekleyen.size) return sonuc;
+
+    const skor = new Map([[baslangicId, 0]]);
+    const kapali = new Set();
+    const yigin = new EnKucukYigin();
+    yigin.koy(baslangicId, 0);
+
+    while (yigin.uzunluk && bekleyen.size) {
+      const su = yigin.al();
+      if (kapali.has(su)) continue;
+      kapali.add(su);
+
+      const suSkor = skor.get(su);
+      if (bekleyen.has(su)) { sonuc.set(su, suSkor); bekleyen.delete(su); }
+
+      for (const k of D.get(su).komsu) {
+        if (kapali.has(k.hedef)) continue;
+        const yeni = suSkor + k[olcut];
+        const eski = skor.get(k.hedef);
+        if (eski !== undefined && eski <= yeni) continue;
+        skor.set(k.hedef, yeni);
+        yigin.koy(k.hedef, yeni);
+      }
+    }
+    return sonuc;
+  },
+
   /* Dugum id dizisini cizim icin noktalara cevir (yukseklik dahil). */
   rotaNoktalari(yol) {
     const D = this.dugumler;

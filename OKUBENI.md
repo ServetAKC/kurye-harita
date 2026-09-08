@@ -240,3 +240,122 @@ lat/lon sakli oldugu icin eldeki karolar bedavaya yeniden yansitilir.
 
 Harita verisi © OpenStreetMap katkicilari, ODbL.
 Yukseklik: AWS Terrain Tiles (SRTM / ASTER / NED).
+
+---
+
+## Adres cozumleme (geocoding)
+
+"Beylikduzu Cumhuriyet Mahallesi" -> `41.0098, 28.6412`
+
+Duraklar artik haritaya tiklayarak degil, panele **koordinat ya da adres
+yazarak** konuyor. Kutu ikisini de kabul ediyor: `41.0011, 28.6417` gibi bir
+sey yazilirsa dogrudan kullanilir, degilse adres sayilip cozulur.
+
+### Parcalar
+
+| dosya | isi |
+|---|---|
+| `adresveri.php` | dis servisle konusur: kimlik, hiz siniri, onbellek |
+| `js/adres.js` | sayfaya tek arayuz sunar: `ara`, `oneri`, `ters`, `koordinatCozumle` |
+
+### Neden vekil uzerinden? (Google kullanmadan, ucretsiz)
+
+Ucu de tarayicidan cozulemeyen sebep:
+
+1. **Kimlik.** Nominatim'in kullanim sartlari gercek bir `User-Agent` istiyor.
+   Tarayici bu basligi JavaScript'ten set ETTIRMIYOR — yasakli baslik.
+2. **Hiz siniri.** Saniyede 1 istek. Tarayicida her sekme kendi basina sayar,
+   ortak sayac tutulamaz. `adresveri.php` tek bir kilit dosyasiyla butun
+   istekleri siraya diziyor (`hizSinirla`).
+3. **Onbellek.** Adresler yerinden oynamiyor, ayni sorgu iki kere sorulmamali.
+   Sunucu tarafinda 30 gun saklaniyor; tarayici onbellegi sekme kapaninca
+   gidiyordu.
+
+Ayrica `osmveri.php`'nin var olma sebebi burada da gecerli: izleme korumasi ve
+reklam engelleyiciler dis isteklerini kesebiliyor, ayni kaynaktan gelen bir PHP
+dosyasi kesilmiyor.
+
+### Servisler
+
+**Photon** (`photon.komoot.io`) — yazarken oneri. Elasticsearch uzerine kurulu,
+yarim kelimeyle calisiyor (`beylikd` -> Beylikduzu). Harita merkezi odak olarak
+veriliyor, yoksa "Merkez Mahallesi" her ilcede var.
+
+**Nominatim** (`nominatim.openstreetmap.org`) — kesin sonuc. Yavas ve sinirli,
+o yuzden sadece Enter'a basildiginda ya da oneri secildiginde cagriliyor.
+
+Ikisi de ayni OpenStreetMap verisini kullaniyor, ikisi de ucretsiz, ikisi de
+anahtar istemiyor. Nominatim bos donerse Photon'a dusuluyor.
+
+### Olculdu (8 Eylul 2026, bu agdan)
+
+| sorgu | sonuc |
+|---|---|
+| `Beylikduzu Cumhuriyet Mahallesi` | ✔ 41.0098, 28.6412 |
+| `beylikd` (oneri) | ✔ 4 sonuc, ilki Beylikduzu merkez |
+| ters: `41.0011, 28.6417` | ✔ Buyuksehir Mahallesi, Beylikduzu |
+| ayni sorgu ikinci kez | ✔ `X-Onbellek: hit` |
+| `... Sakarya Caddesi 12 ...` | ✘ bos |
+
+**Kapi numarasi cozulmuyor.** Turkiye'de OSM'e bina numaralari buyuk olcude
+girilmemis; mahalle ve cadde seviyesi saglam, kapi seviyesi degil. Bu veri
+eksikligi, kod hatasi degil — sorgu bos donuyor, hata donmuyor.
+
+Kapi numarasi sart olursa secenekler: Turkiye'nin resmi adres sistemi (NVI/AKS,
+kurumsal erisim gerekiyor) ya da ucretsiz katmani olan ticari bir servis
+(Yandex, HERE, TomTom). Google zorunlu degil.
+
+### Yuk artarsa: kendi sunucunda calistir
+
+Nominatim de Photon da acik kaynak ve Docker imajlari hazir. Turkiye ozeti
+Geofabrik'ten ~700 MB (butun dunya 80 GB degil). O zaman hiz siniri yok, gunluk
+kota yok, ucuncu tarafa bagimlilik yok, veri de elinde. Bu dosyalarda
+degistirilmesi gereken tek sey `adresveri.php` icindeki servis adresleri.
+
+---
+
+## Teslimat sirasi ve seferler
+
+Etiketlerdeki **1 2 3** ekleme sirasi degil, kuryenin gercekten ugrayacagi sira.
+
+### Sira gercek yol maliyetine gore
+
+Eskiden sira kus ucusu mesafeye gore seciliyordu. Buyukcekmece'de bu yaniltiyor:
+golun iki yakasi kus ucusu 200 m, yoldan 3.4 km. Algoritma karsi yakayi "en
+yakin" sanip kuryeyi golun etrafinda gidip gelmeye sokuyordu.
+
+Artik butun duraklar arasi **gercek yol maliyeti** cikariliyor
+(`Grafik.maliyetler`, durak basina tek Dijkstra — n^2 A* degil). Sira, kapasite
+bolunmesi, her sey bu matris uzerinden.
+
+### Seferler dogrudan kuruluyor (Clarke-Wright)
+
+Eskiden tek buyuk tur kurulup kapasite kadar parcaya **kesiliyordu**. Bu sessizce
+yanlisti: tur kapali bir halka oldugu icin ters yonde dolasmak ayni maliyeti
+verir ama kesim noktalari degisir, yani gruplar degisir. Olculdu: ayni maliyetli
+iki turdan biri 9200 m, otekisi 11200 m sefer uretti — %20 fark, tamamen turun
+hangi yone dolandigina bagli.
+
+Yerine Clarke-Wright tasarruf yontemi kondu. Herkes kendi seferinde baslar
+(`sube -> i -> sube`), sonra birlestirmenin en cok kazandirdigi ciftler sirayla
+birlestirilir:
+
+```
+kazanc(i,j) = d(i,sube) + d(sube,j) - d(i,j)
+```
+
+Sonra seferler arasi bir pas: **tasima** (bir musteriyi baska sefere al) ve
+**takas** (iki musteriyi degistir). Takas ayri lazim, iki sefer de doluysa
+tasima yapilamiyor.
+
+### Olculdu
+
+`scratchpad/test_sira.js` — ortasindan su gecen 21x21 izgara, tek koprusu var.
+
+- Sira kaba kuvvetle (butun permutasyonlar) birebir ayni cikiyor.
+- 200 rastgele dizilim, 6 musteri, kapasite 3:
+  **eski 12373 m -> yeni 11202 m, ortalama %9.5 kisa.**
+  119 dizilimde yeni daha iyi, 78'inde esit, 3'unde eski daha iyi.
+
+Son uc onemli: bunlar sezgisel yontemler, en iyiyi garanti etmiyorlar. Kucuk
+musteri sayilarinda pratikte en iyiye cok yakin duruyorlar.

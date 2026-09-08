@@ -233,6 +233,12 @@ const Uyg = {
   abartmaYaz() {
     document.getElementById('abartma').value = Arazi.abartma.toFixed(1);
     document.getElementById('abartmaDeger').textContent = Arazi.abartma.toFixed(1) + '×';
+    /* On ayar dugmesi tam o degerdeyse isaretlensin. Kaydirici elle
+       oynatildiginda hicbiri isaretli kalmaz — dogru olan bu, deger
+       artik on ayarlardan biri degil. */
+    document.querySelectorAll('[data-abartma]').forEach((b) => {
+      b.classList.toggle('aktif', Math.abs(parseFloat(b.dataset.abartma) - Arazi.abartma) < 0.01);
+    });
   },
 
   /* ---------------- kamera hareketleri ---------------- */
@@ -295,97 +301,266 @@ const Uyg = {
 
      Ziyaret sirasi da onemli: ekleme sirasiyla gitmek gereksiz
      gidip gelme uretiyor. Once en yakin komsu ile bir sira
-     kuruluyor, sonra 2-opt ile kesisen bacaklar duzeltiliyor.
-     Sira KUS UCUSU mesafeye gore secilyor (A* ile her cifti
-     hesaplamak n^2 rota demek olurdu); secilen sira icin gercek
-     yol rotalari bir kez hesaplaniyor.
+     kuruluyor, sonra 2-opt + tasima ile duzeltiliyor.
+
+     Sira GERCEK YOL MALIYETINE gore seciliyor, kus ucusuna gore
+     degil. Kus ucusu Buyukcekmece'de yaniliyordu: golun iki yakasi
+     kus ucusu 1 km, yoldan 9 km — algoritma karsi yakayi "yakin"
+     sanip kuryeyi golun etrafinda gidip gelmeye sokuyordu. Ayni
+     sey sahil, otoyol boyu ve tek yon kurallari icin de gecerli.
+
+     Maliyetler bir MATRIS olarak bir kez cikariliyor: durak basina
+     tek Dijkstra (bkz. Grafik.maliyetler), n^2 A* degil. Etiketteki
+     1 2 3 numaralari bu siranin ta kendisi.
      ------------------------------------------------------------ */
 
-  /* Iki durak arasi kus ucusu mesafe (metre) */
+  /* Iki durak arasi kus ucusu mesafe (metre) — matris kurulamazsa yedek */
   _kusUcusu(a, b) {
     return Proj.mesafe(a.lat, a.lon, b.lat, b.lon);
   },
 
-  /* Ziyaret sirasini bul. Donen dizi: musteriler[] icindeki indeksler. */
-  teslimatSirasiBul(donus) {
-    const M = this.musteriler, n = M.length;
-    if (n <= 1) return M.map((m, i) => i);
+  /* ------------------------------------------------------------
+     MALIYET MATRISI
+     duraklar[0] = sube, duraklar[i+1] = musteriler[i]
+     Donen: { d(i,j), ulasilmaz }  — d metre ya da saniye (olcut'e gore)
 
-    // --- en yakin komsu ---
-    const kalan = M.map((m, i) => i);
-    const sira = [];
-    let su = this.sube;
-    while (kalan.length) {
-      let en = 0, enD = Infinity;
-      for (let j = 0; j < kalan.length; j++) {
-        const d = this._kusUcusu(su, M[kalan[j]]);
-        if (d < enD) { enD = d; en = j; }
+     Ulasilamayan cift Infinity yerine kus ucusunun 4 katiyla
+     doldurulur: Infinity 2-opt karsilastirmalarini NaN'a cevirip
+     sirayi bozuyor. Buyuk ama sonlu ceza, o bacagi pratikte hep
+     en sona itiyor ve algoritma calismaya devam ediyor.
+     ------------------------------------------------------------ */
+  maliyetMatrisi(duraklar, olcut) {
+    const n = duraklar.length;
+    const idler = duraklar.map(d => d.dugumId);
+    const D = [];
+    let ulasilmaz = 0;
+
+    for (let i = 0; i < n; i++) {
+      const bulunan = Grafik.maliyetler(idler[i], idler, olcut);
+      D[i] = new Array(n);
+      for (let j = 0; j < n; j++) {
+        if (i === j) { D[i][j] = 0; continue; }
+        const m = bulunan.get(idler[j]);
+        if (m === undefined) {
+          ulasilmaz++;
+          const ku = this._kusUcusu(duraklar[i], duraklar[j]);
+          D[i][j] = (olcut === 'sure' ? ku / (40 * 1000 / 3600) : ku) * 4;
+        } else {
+          D[i][j] = m;
+        }
       }
-      su = M[kalan[en]];
-      sira.push(kalan[en]);
-      kalan.splice(en, 1);
     }
-    if (n < 3) return sira;
+    /* Tek yon kurallari yuzunden matris SIMETRIK DEGIL: A'dan B'ye
+       gitmek B'den A'ya donmekten pahali olabilir. Ortalama alip
+       simetrik yapma — kuryenin gercekten gidecegi yon bu. */
+    return { d: (i, j) => D[i][j], ulasilmaz: ulasilmaz };
+  },
 
-    // --- 2-opt: kesisen bacaklari duzelt ---
-    const uzunluk = (s) => {
-      let t = this._kusUcusu(this.sube, M[s[0]]);
-      for (let i = 0; i + 1 < s.length; i++) t += this._kusUcusu(M[s[i]], M[s[i + 1]]);
-      if (donus) t += this._kusUcusu(M[s[s.length - 1]], this.sube);
-      return t;
-    };
-    /* n buyudukce O(n^2) tarama pahalilasir; tur sayisi sinirli tutuluyor.
-       Elle konan musteri sayisi kucuk oldugu icin pratikte birkac tur yeter. */
-    let en = uzunluk(sira), tur = 0;
-    let iyilesti = true;
-    while (iyilesti && tur++ < 40) {
+  /* Bir sira dizisinin toplam maliyeti.
+     s: musteriler[] indeksleri. Matriste sube 0, musteri i -> i+1.
+     donus=true ise son musteriden subeye donus de sayilir. */
+  _turMaliyeti(mat, s, donus) {
+    if (!s.length) return 0;
+    let t = mat.d(0, s[0] + 1);
+    for (let i = 0; i + 1 < s.length; i++) t += mat.d(s[i] + 1, s[i + 1] + 1);
+    if (donus) t += mat.d(s[s.length - 1] + 1, 0);
+    return t;
+  },
+
+  /* 2-opt (parca ters cevirme) + tasima (bir duragi baska yere al).
+     Ikisi farkli hatalari duzeltiyor: 2-opt kesisen bacaklari acar,
+     tasima ise "yol ustundeki musteri en sona kalmis" durumunu. Tek
+     basina 2-opt bunu cozemiyor cunku ters cevirme sirayi korur. */
+  _sirayiIyilestir(mat, sira, donus, enFazlaTur) {
+    if (sira.length < 3) return sira;
+    let en = this._turMaliyeti(mat, sira, donus);
+    let tur = 0, iyilesti = true;
+
+    while (iyilesti && tur++ < (enFazlaTur || 40)) {
       iyilesti = false;
+
+      // --- 2-opt ---
       for (let i = 0; i < sira.length - 1 && !iyilesti; i++) {
         for (let j = i + 1; j < sira.length; j++) {
           const aday = sira.slice(0, i)
             .concat(sira.slice(i, j + 1).reverse(), sira.slice(j + 1));
-          const u = uzunluk(aday);
-          if (u < en - 1e-6) {
-            sira.length = 0;
-            for (const v of aday) sira.push(v);
-            en = u; iyilesti = true; break;
-          }
+          const u = this._turMaliyeti(mat, aday, donus);
+          if (u < en - 1e-6) { sira = aday; en = u; iyilesti = true; break; }
+        }
+      }
+      if (iyilesti) continue;
+
+      // --- tasima (or-opt, tek durak) ---
+      for (let i = 0; i < sira.length && !iyilesti; i++) {
+        const eksik = sira.slice(0, i).concat(sira.slice(i + 1));
+        for (let j = 0; j <= eksik.length; j++) {
+          if (j === i) continue;
+          const aday = eksik.slice(0, j).concat([sira[i]], eksik.slice(j));
+          const u = this._turMaliyeti(mat, aday, donus);
+          if (u < en - 1e-6) { sira = aday; en = u; iyilesti = true; break; }
         }
       }
     }
     return sira;
   },
 
-  /* Bir SEFERIN ic sirasini iyilestir (sube -> ... -> sube).
-     teslimatSirasiBul butun musterileri tek tur sayiyor; kapasite
-     bolunmesinden sonra her sefer kendi icinde ayrica duzeltilmeli,
-     cunku sefer artik subeye donuyor. */
-  seferIciDuzelt(sefer) {
-    const M = this.musteriler;
-    if (sefer.length < 3) return sefer;
-    const uzunluk = (s) => {
-      let t = this._kusUcusu(this.sube, M[s[0]]);
-      for (let i = 0; i + 1 < s.length; i++) t += this._kusUcusu(M[s[i]], M[s[i + 1]]);
-      return t + this._kusUcusu(M[s[s.length - 1]], this.sube);
-    };
-    let en = uzunluk(sefer), tur = 0, iyilesti = true;
-    while (iyilesti && tur++ < 20) {
+  /* Ziyaret sirasini bul. Donen dizi: musteriler[] icindeki indeksler. */
+  teslimatSirasiBul(mat, donus) {
+    const n = this.musteriler.length;
+    if (n <= 1) return this.musteriler.map((m, i) => i);
+
+    /* --- en yakin komsu: her adimda GERCEK yoldan en yakin olana git --- */
+    const kalan = this.musteriler.map((m, i) => i);
+    const sira = [];
+    let su = 0;                                   // matris indeksi: 0 = sube
+    while (kalan.length) {
+      let en = 0, enD = Infinity;
+      for (let j = 0; j < kalan.length; j++) {
+        const d = mat.d(su, kalan[j] + 1);
+        if (d < enD) { enD = d; en = j; }
+      }
+      su = kalan[en] + 1;
+      sira.push(kalan[en]);
+      kalan.splice(en, 1);
+    }
+
+    /* En yakin komsu acgozlu: son musteriler ic acici olmayan yerlerde
+       kaliyor. Iyilestirme sart, tek basina yeterli degil. */
+    return this._sirayiIyilestir(mat, sira, donus, 40);
+  },
+
+  /* Bir SEFERIN ic sirasini iyilestir (sube -> ... -> sube). */
+  seferIciDuzelt(mat, sefer) {
+    return this._sirayiIyilestir(mat, sefer, true, 20);
+  },
+
+  /* ============================================================
+     SEFERLERE BOLME — Clarke-Wright tasarruf yontemi
+     ------------------------------------------------------------
+     Eskiden tek bir buyuk tur kurulup kapasite kadar parcaya
+     KESILIYORDU. Bu yanlisti ve sessizce yanlisti: tur kapali bir
+     halka oldugu icin ters yonde dolasmak ayni maliyeti verir ama
+     KESIM NOKTALARI degisir, yani gruplar degisir.
+
+     Olculdu (scratchpad/test_sira.js, ortasindan su gecen izgara,
+     5 musteri, kapasite 3): ayni maliyetli iki turdan biri 9200 m,
+     otekisi 11200 m sefer uretti. Grup kararini turun hangi yone
+     dolandigina birakmak boyle bir sey — %20'lik fark, tamamen
+     tesadufe bagli.
+
+     Clarke-Wright gruplari DOGRUDAN kuruyor. Herkes kendi
+     seferinde baslar (sube -> i -> sube), sonra "birlestirmenin
+     en cok kazandirdigi" ciftler sirayla birlestirilir:
+
+         kazanc(i,j) = d(i,sube) + d(sube,j) - d(i,j)
+
+     yani i ile j'yi ayni sefere koyunca subeye bir gidip gelmeden
+     kac metre kar edildigi. Kazanc negatifse birlestirmenin
+     anlami yok, orada durulur.
+     ============================================================ */
+  seferleriKur(mat, kapasite) {
+    const n = this.musteriler.length;
+    if (!n) return [];
+    if (kapasite >= n) {
+      return [this._sirayiIyilestir(mat, this.musteriler.map((m, i) => i), true, 40)];
+    }
+
+    const sefer = this.musteriler.map((m, i) => [i]);   // herkes kendi seferinde
+    const nerede = this.musteriler.map((m, i) => i);    // musteri -> sefer indeksi
+
+    const kazanc = [];
+    for (let i = 0; i < n; i++) {
+      for (let j = 0; j < n; j++) {
+        if (i === j) continue;
+        /* Matris simetrik degil (tek yon), o yuzden (i,j) ve (j,i)
+           ayri ayri degerlendiriliyor: i'den sonra j gelmek ile
+           j'den sonra i gelmek farkli maliyetler. */
+        kazanc.push({ i: i, j: j, k: mat.d(i + 1, 0) + mat.d(0, j + 1) - mat.d(i + 1, j + 1) });
+      }
+    }
+    kazanc.sort((a, b) => b.k - a.k);
+
+    for (const kz of kazanc) {
+      if (kz.k <= 0) break;                       // bundan sonrasi zarar
+      const a = nerede[kz.i], b = nerede[kz.j];
+      if (a === b) continue;                      // zaten ayni seferde
+      const A = sefer[a], B = sefer[b];
+      if (!A || !B) continue;
+      /* i, A'nin SONUNDA ve j, B'nin BASINDA olmali: birlestirme
+         A -> B seklinde uc uca ekleme. Ortadaki bir musteriyi
+         baglamak seferin ic sirasini bozar. */
+      if (A[A.length - 1] !== kz.i || B[0] !== kz.j) continue;
+      if (A.length + B.length > kapasite) continue;
+
+      for (const m of B) nerede[m] = a;
+      sefer[a] = A.concat(B);
+      sefer[b] = null;
+    }
+
+    return sefer.filter(Boolean).map((s) => this._sirayiIyilestir(mat, s, true, 20));
+  },
+
+  /* ------------------------------------------------------------
+     SEFERLER ARASI IYILESTIRME
+     Clarke-Wright acgozlu: erken yapilan birlestirmeler sonraki
+     secenekleri kapatiyor. Bu pas iki hamleyle toparliyor —
+     TASIMA (bir musteriyi baska sefere al) ve TAKAS (iki musteriyi
+     degistir). Takas ayri lazim: iki sefer de doluysa tasima
+     yapilamiyor, sadece takas kaliyor.
+     ------------------------------------------------------------ */
+  seferleriIyilestir(mat, seferler, kapasite) {
+    const bedel = (s) => (s && s.length) ? this._turMaliyeti(mat, s, true) : 0;
+    let tur = 0, iyilesti = true;
+
+    while (iyilesti && tur++ < 30) {
       iyilesti = false;
-      for (let i = 0; i < sefer.length - 1 && !iyilesti; i++) {
-        for (let j = i + 1; j < sefer.length; j++) {
-          const aday = sefer.slice(0, i)
-            .concat(sefer.slice(i, j + 1).reverse(), sefer.slice(j + 1));
-          const u = uzunluk(aday);
-          if (u < en - 1e-6) { sefer = aday; en = u; iyilesti = true; break; }
+      for (let a = 0; a < seferler.length && !iyilesti; a++) {
+        for (let b = 0; b < seferler.length && !iyilesti; b++) {
+          if (a === b) continue;
+          const A = seferler[a], B = seferler[b];
+          const eski = bedel(A) + bedel(B);
+
+          // --- tasima: A'dan bir musteriyi B'ye al ---
+          if (B.length < kapasite) {
+            for (let i = 0; i < A.length && !iyilesti; i++) {
+              const yeniA = A.slice(0, i).concat(A.slice(i + 1));
+              for (let j = 0; j <= B.length; j++) {
+                const yeniB = B.slice(0, j).concat([A[i]], B.slice(j));
+                if (bedel(yeniA) + bedel(yeniB) < eski - 1e-6) {
+                  seferler[a] = yeniA; seferler[b] = yeniB;
+                  iyilesti = true; break;
+                }
+              }
+            }
+          }
+          if (iyilesti) break;
+
+          // --- takas: A'daki i ile B'deki j yer degistirsin ---
+          for (let i = 0; i < A.length && !iyilesti; i++) {
+            for (let j = 0; j < B.length; j++) {
+              const yeniA = A.slice(); yeniA[i] = B[j];
+              const yeniB = B.slice(); yeniB[j] = A[i];
+              if (bedel(yeniA) + bedel(yeniB) < eski - 1e-6) {
+                seferler[a] = this._sirayiIyilestir(mat, yeniA, true, 10);
+                seferler[b] = this._sirayiIyilestir(mat, yeniB, true, 10);
+                iyilesti = true; break;
+              }
+            }
+          }
         }
       }
     }
-    return sefer;
+
+    /* Bos kalan seferleri at, kalanlari subeye yakinliga gore
+       sirala: kurye once yakin turu yapsin, numaralar da haritada
+       merkezden disa dogru okunsun. */
+    return seferler.filter((s) => s && s.length)
+                   .sort((x, y) => mat.d(0, x[0] + 1) - mat.d(0, y[0] + 1));
   },
 
   testRota() {
-    if (!this.sube) { this.durum('Once "Sube koy" ile bir sube isaretle.', 'uyari'); return; }
-    if (!this.musteriler.length) { this.durum('Once "Musteri ekle" ile musteri koy.', 'uyari'); return; }
+    if (!this.sube) { this.durum('Once bir sube koy: koordinat ya da adres yazip "Sube yap".', 'uyari'); return; }
+    if (!this.musteriler.length) { this.durum('Once en az bir musteri ekle.', 'uyari'); return; }
     const ist = this.grafigiHazirla();
     const olcut = document.getElementById('olcut').value;
     const kapK = document.getElementById('kapasite');
@@ -399,14 +574,17 @@ const Uyg = {
     this.kurye.aktif = false; this.kurye.rotaIdx = 0;
     this.kurye.segIdx = 0; this.kurye.t = 0; this.kurye.varis = 0;
 
-    /* Once butun musteriler icin makul bir sira, sonra kapasiteye gore
-       SEFERLERE bolme. Sira cografi oldugu icin ardisik musteriler zaten
-       birbirine yakin dusuyor; her sefer kendi icinde ayrica duzeltiliyor. */
-    const genelSira = this.teslimatSirasiBul(true);
-    const seferler = [];
-    for (let i = 0; i < genelSira.length; i += kapasite) {
-      seferler.push(this.seferIciDuzelt(genelSira.slice(i, i + kapasite)));
-    }
+    /* Butun duraklar arasi GERCEK yol maliyeti — bir kez, sira
+       kararlarinin tamami bunun uzerinden veriliyor. Durak basina tek
+       Dijkstra; 5 musteride 6 tarama, 15 musteride 16. */
+    const mat = this.maliyetMatrisi([this.sube].concat(this.musteriler), olcut);
+    const tMat = performance.now() - t0;
+
+    /* Seferler dogrudan kuruluyor (Clarke-Wright), sonra seferler
+       arasi tasima/takas ile toparlaniyor. Buyuk turu kesme yontemi
+       kaldirildi — sebebi seferleriKur basliginda. */
+    const seferler = this.seferleriIyilestir(
+      mat, this.seferleriKur(mat, kapasite), kapasite);
     this.teslimatSirasi = [];
     for (const s of seferler) for (const i of s) this.teslimatSirasi.push(i);
 
@@ -436,19 +614,258 @@ const Uyg = {
     const birim = olcut === 'sure' ? (Math.round(toplam / 60) + ' dk') : (Math.round(toplam) + ' m');
     this.durum(this.musteriler.length + ' teslimat · ' + seferler.length + ' sefer (kapasite ' +
                kapasite + ') · ' + birim + '  ·  ' + ist.dugum + ' dugumluk grafikte ' +
-               ms.toFixed(0) + ' ms' +
+               ms.toFixed(0) + ' ms (matris ' + tMat.toFixed(0) + ' ms)' +
+               (mat.ulasilmaz ? ('  ·  ' + mat.ulasilmaz + ' cift yoldan baglanmiyor') : '') +
                (basarisiz ? ('  ·  ' + basarisiz + ' bacakta yol yok') : ''),
-               basarisiz ? 'uyari' : 'iyi');
+               (basarisiz || mat.ulasilmaz) ? 'uyari' : 'iyi');
+    this.duraklariYaz();
   },
   temizle() {
     this.musteriler = []; this.rotalar = []; this.teslimatSirasi = []; this.bacakBilgi = [];
     this.kurye.aktif = false; this.kurye.varis = 0;
+    this.duraklariYaz();
     this.durum('Musteriler ve rotalar silindi.');
   },
 
   konum(nokta) {
     const m = Proj.metreye(nokta.lat, nokta.lon);
     return { x: m.x, y: m.y, z: Arazi.cz(Arazi.latLonYukseklik(nokta.lat, nokta.lon)) };
+  },
+
+  /* ============================================================
+     KOORDINAT / ADRES ILE DURAK KOYMA
+     ------------------------------------------------------------
+     Haritaya tiklayarak koymak gosterim icin iyi ama gercek is
+     akisi boyle degil: elde bir adres ya da koordinat listesi
+     olur, tek tek tiklanmaz. Kutu ikisini birden kabul ediyor —
+     koordinat yazilirsa dogrudan kullanilir, degilse adres
+     sayilip cozulur (bkz. adres.js).
+
+     Her durak EN YAKIN YOL DUGUMUNE oturtuluyor. Rota grafik
+     uzerinde hesaplandigi icin durak grafikte olmayan bir yerde
+     duramaz: bina ortasindaki bir koordinattan rota cikmaz.
+     ============================================================ */
+
+  _secilenAdres: null,     // oneriden secilen sonucun adi (etikette gorunsun)
+
+  /* lat/lon -> en yakin yol dugumu. Veri inmemisse null. */
+  yolDugumuBul(lat, lon, sinir) {
+    const ist = this.grafigiHazirla();
+    if (!ist || !ist.dugum) return null;
+    const m = Proj.metreye(lat, lon);
+    const yk = Grafik.enYakinDugum(m.x, m.y);
+    if (!yk) return null;
+    /* 400 m: kapali sitelerin ve sanayi alanlarinin ic yollari
+       OSM'de her zaman cizili degil, adres dogru olsa bile en
+       yakin yol biraz uzakta kalabiliyor. Daha genis tutulursa
+       komsu mahalleye atlamaya baslar. */
+    return yk.uzaklik <= (sinir || 400) ? yk : null;
+  },
+
+  /* Karolar inene kadar bekle. Uzak bir koordinat verildiginde
+     grafikte o bolge henuz yok; once oraya gidiliyor, veri
+     iniyor, sonra dugum aranıyor. */
+  yolDugumuBekle(lat, lon, sure) {
+    const bitis = Date.now() + (sure || 15000);
+    return new Promise((coz) => {
+      const dene = () => {
+        const yk = this.yolDugumuBul(lat, lon);
+        if (yk) { coz(yk); return; }
+        if (Date.now() > bitis) { coz(null); return; }
+        setTimeout(dene, 500);
+      };
+      setTimeout(dene, 700);
+    });
+  },
+
+  async durakKoy(tip, lat, lon, ad) {
+    let yk = this.yolDugumuBul(lat, lon);
+    if (!yk) {
+      this.durum('Oraya gidiliyor, yol verisi iniyor...');
+      this.gitKonuma(lat, lon, Math.max(Kamera.olcek, 0.9));
+      yk = await this.yolDugumuBekle(lat, lon, 20000);
+    }
+    if (!yk) {
+      this.durum('O noktanin 400 m yakininda cizili yol yok — veri inmemis ' +
+                 'olabilir ya da koordinat yolsuz bir alanda.', 'hata');
+      return false;
+    }
+
+    const d = yk.dugum;
+    const durak = { dugumId: d.id, lat: d.lat, lon: d.lon, ad: ad || null };
+    /* Yola oturtma noktayi biraz kaydiriyor; kullanici ne kadar
+       kaydigini bilsin, "yanlis yere koydu" sanmasin. */
+    const kayma = Math.round(yk.uzaklik);
+
+    if (tip === 'sube') {
+      this.sube = durak;
+      this.durum('Sube kondu' + (ad ? ': ' + ad.split(',').slice(0, 2).join(',') : '') +
+                 (kayma > 25 ? '  ·  yola ' + kayma + ' m oturtuldu' : ''), 'iyi');
+    } else {
+      this.musteriler.push(durak);
+      this.durum(this.musteriler.length + '. musteri kondu' +
+                 (ad ? ': ' + ad.split(',').slice(0, 2).join(',') : '') +
+                 (kayma > 25 ? '  ·  yola ' + kayma + ' m oturtuldu' : ''), 'iyi');
+    }
+    /* Durak degisti, eldeki rota artik o duraklara ait degil.
+       Bayat rotayi ekranda birakmak "1 2 3" numaralarini da
+       yanlis gosterirdi. */
+    this.rotalariUnut();
+    this.duraklariYaz();
+    return true;
+  },
+
+  /* Kutudaki metni cozup durak koy. Koordinatsa dogrudan,
+     adresse once cozup gerekirse secim listesi gosterir. */
+  async durakEkle(tip) {
+    const kutu = document.getElementById('konumKutu');
+    const metin = kutu.value.trim();
+    if (!metin) { this.durum('Once koordinat ya da adres yaz.', 'uyari'); return; }
+
+    const nokta = Adres.koordinatCozumle(metin);
+    if (nokta) {
+      /* Oneriden secilmisse adi da tasi: koordinat ayni ise o adres. */
+      const s = this._secilenAdres;
+      const ad = (s && Math.abs(s.lat - nokta.lat) < 1e-6 &&
+                       Math.abs(s.lon - nokta.lon) < 1e-6) ? s.ad : null;
+      await this.durakKoy(tip, nokta.lat, nokta.lon, ad);
+      return;
+    }
+
+    if (Adres.virgulluOndalik(metin)) {
+      this.durum('Ondalik ayirac NOKTA olmali: "41,0011" degil "41.0011". ' +
+                 'Virgul sadece enlem ile boylamı ayirir.', 'uyari');
+      return;
+    }
+
+    this.durum('Adres cozuluyor: ' + metin);
+    try {
+      const liste = await Adres.ara(metin);
+      if (!liste.length) { this.durum('Adres bulunamadi: ' + metin, 'uyari'); return; }
+      if (liste.length === 1) {
+        await this.durakKoy(tip, liste[0].lat, liste[0].lon, liste[0].ad);
+        return;
+      }
+      /* Birden fazla sonuc: sessizce ilkini secmek yanlis semte
+         durak koymak demek ("Merkez Mahallesi" her ilcede var). */
+      this.adresSectir(liste, tip);
+    } catch (e) {
+      this.durum('Adres servisi hatasi: ' + e.message, 'hata');
+    }
+  },
+
+  /* Cok sonuclu aramada hangisi oldugunu kullanici secsin. */
+  adresSectir(liste, tip) {
+    const kap = document.getElementById('konumOneri');
+    kap.innerHTML = '';
+    liste.forEach((y) => {
+      const d = document.createElement('div');
+      d.className = 'sonuc';
+      d.textContent = y.ad;
+      d.onclick = async () => {
+        kap.innerHTML = '';
+        await this.durakKoy(tip, y.lat, y.lon, y.ad);
+      };
+      kap.appendChild(d);
+    });
+    this.durum(liste.length + ' sonuc — hangisi oldugunu sec.', 'uyari');
+  },
+
+  /* Yazarken oneri. Secilince kutuya koordinat yaziliyor: boylece
+     kullanici ne konacagini tam olarak goruyor ve isterse elle
+     duzeltiyor. */
+  async oneriGoster() {
+    const kutu = document.getElementById('konumKutu');
+    const kap = document.getElementById('konumOneri');
+    const metin = kutu.value.trim();
+
+    if (Adres.koordinatCozumle(metin) || metin.length < 3) { kap.innerHTML = ''; return; }
+    /* Harita merkezini odak olarak ver: "Merkez Mahallesi" her
+       ilcede var, yakindakiler one ciksin. */
+    const liste = await Adres.oneri(metin, Proj.lat0, Proj.lon0);
+    if (kutu.value.trim() !== metin) return;      // kullanici yazmaya devam etti
+
+    kap.innerHTML = '';
+    liste.forEach((y) => {
+      const d = document.createElement('div');
+      d.className = 'sonuc';
+      d.textContent = y.ad;
+      d.onclick = () => {
+        kutu.value = y.lat.toFixed(6) + ', ' + y.lon.toFixed(6);
+        this._secilenAdres = { lat: y.lat, lon: y.lon, ad: y.ad };
+        kap.innerHTML = '';
+        this.durum(y.ad, 'iyi');
+      };
+      kap.appendChild(d);
+    });
+  },
+
+  rotalariUnut() {
+    this.rotalar = []; this.teslimatSirasi = []; this.bacakBilgi = [];
+    this.kurye.aktif = false; this.kurye.varis = 0;
+    this.kurye.rotaIdx = 0; this.kurye.segIdx = 0; this.kurye.t = 0;
+    /* Kurye yoldayken durak degisirse dugme "durdur"da kalirdi. */
+    this.kuryeDugmesiniYaz();
+  },
+
+  /* Panel listesi. Rota cizilmisse TESLIMAT sirasina gore diziliyor —
+     numaralar haritadaki isaretcilerle birebir ayni. */
+  duraklariYaz() {
+    const kap = document.getElementById('duraklarListe');
+    if (!kap) return;
+    kap.innerHTML = '';
+
+    if (!this.sube && !this.musteriler.length) {
+      kap.textContent = 'Sube yok · musteri yok';
+      return;
+    }
+
+    const satir = (no, sinif, ad, silFn) => {
+      const s = document.createElement('div');
+      s.className = 'durakSatir';
+      const n = document.createElement('b');
+      n.className = 'no' + (sinif ? ' ' + sinif : '');
+      n.textContent = no;
+      const a = document.createElement('span');
+      a.className = 'ad';
+      a.textContent = ad;
+      a.title = ad;
+      s.appendChild(n); s.appendChild(a);
+      if (silFn) {
+        const b = document.createElement('button');
+        b.className = 'sil'; b.textContent = '✕'; b.title = 'sil';
+        b.onclick = silFn;
+        s.appendChild(b);
+      }
+      kap.appendChild(s);
+    };
+    const yaz = (d) => d.ad ? d.ad.split(',').slice(0, 2).join(',')
+                            : d.lat.toFixed(5) + ', ' + d.lon.toFixed(5);
+
+    if (this.sube) {
+      satir('S', 'sube', yaz(this.sube), () => {
+        this.sube = null; this.rotalariUnut(); this.duraklariYaz();
+        this.durum('Sube silindi.');
+      });
+    }
+
+    /* Rota varsa teslimat sirasina gore, yoksa ekleme sirasina gore. */
+    const sirali = this.teslimatSirasi.length === this.musteriler.length
+      ? this.teslimatSirasi.slice()
+      : this.musteriler.map((m, i) => i);
+
+    sirali.forEach((i, yer) => {
+      const m = this.musteriler[i];
+      if (!m) return;
+      const no = this.teslimatSirasi.length === this.musteriler.length
+        ? String(yer + 1) : '#' + (i + 1);
+      satir(no, '', yaz(m), () => {
+        this.musteriler.splice(i, 1);
+        this.rotalariUnut();      // indeksler kaydi, eski sira gecersiz
+        this.duraklariYaz();
+        this.durum(this.musteriler.length + ' musteri kaldi. Rotayi yeniden ciz.');
+      });
+    });
   },
 
   /* ---------------- olaylar ---------------- */
@@ -474,6 +891,20 @@ const Uyg = {
     kHizYaz();
     document.getElementById('rotaBtn').onclick = () => this.testRota();
     document.getElementById('temizleBtn').onclick = () => this.temizle();
+
+    /* --- koordinat / adres ile durak koyma --- */
+    document.getElementById('subeYapBtn').onclick = () => this.durakEkle('sube');
+    document.getElementById('musteriYapBtn').onclick = () => this.durakEkle('musteri');
+    const kKutu = document.getElementById('konumKutu');
+    kKutu.oninput = () => this.oneriGoster();
+    kKutu.onkeydown = (e) => {
+      /* Enter = musteri ekle: en sik yapilan is bu, sube bir kere
+         konuyor. Shift+Enter sube yapar. */
+      if (e.key !== 'Enter') return;
+      e.preventDefault();
+      this.durakEkle(e.shiftKey ? 'sube' : 'musteri');
+    };
+    this.duraklariYaz();
 
     document.getElementById('git').onchange = (e) => {
       const h = this.GIT[e.target.value];
@@ -511,9 +942,18 @@ const Uyg = {
 
     document.getElementById('abartma').oninput = (e) => {
       Arazi.abartma = parseFloat(e.target.value);
-      document.getElementById('abartmaDeger').textContent = Arazi.abartma.toFixed(1) + '×';
+      this.abartmaYaz();
       Cizer.kirlet();
     };
+    /* On ayarlar. 2× "hafif kabartma" — yollar duz kalsin ama tepe
+       nerede belli olsun diye; 6× varsayilan; 12× arazi calismasi. */
+    document.querySelectorAll('[data-abartma]').forEach((b) => {
+      b.onclick = () => {
+        Arazi.abartma = parseFloat(b.dataset.abartma);
+        this.abartmaYaz();
+        Cizer.kirlet();
+      };
+    });
     document.getElementById('abartmaOto').onclick = () => {
       const gb = Cizer.gorunenBolge(0);
       Arazi.abartma = Arazi.abartmaOner(gb.maxx - gb.minx);
@@ -609,12 +1049,16 @@ const Uyg = {
     }
     const d = yk.dugum;
     if (this.mod === 'sube') {
-      this.sube = { dugumId: d.id, lat: d.lat, lon: d.lon };
+      this.sube = { dugumId: d.id, lat: d.lat, lon: d.lon, ad: null };
       this.durum('Sube isaretlendi.');
     } else {
-      this.musteriler.push({ dugumId: d.id, lat: d.lat, lon: d.lon });
+      this.musteriler.push({ dugumId: d.id, lat: d.lat, lon: d.lon, ad: null });
       this.durum(this.musteriler.length + ' musteri.');
     }
+    /* Koordinatla koymadaki ile ayni: durak degisti, eldeki rota
+       ve numaralar artik bu duraklara ait degil. */
+    this.rotalariUnut();
+    this.duraklariYaz();
   },
 
   /* ---------------- ana dongu ---------------- */
