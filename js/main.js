@@ -815,6 +815,7 @@ const Uyg = {
 
       if (c.hata) { this.durum(c.hata, 'uyari'); this.tougeYaz(null); return; }
       this.tougeYaz(c);
+      this.tougeIlkiSec(c, true);
       Cizer.kirlet();
       this.durum(c.toplam + ' aday · ' + c.zincir + ' zincir (' + c.yol + ' yol parcasi) · ' +
                  this.tougeEleme(c) +
@@ -886,6 +887,7 @@ const Uyg = {
         { mahalleDahil: document.getElementById('tougeMahalle').checked });
       if (c.hata) { this.durum(c.hata, 'uyari'); this.tougeYaz(null); return; }
       this.tougeYaz(c);
+      this.tougeIlkiSec(c, true);
       Cizer.kirlet();
       this.durum(ad + ' · ' + km + ' km · ' + v.blok + ' blok · ' +
                  c.zincir + ' zincir · ' + c.toplam + ' aday' +
@@ -1137,6 +1139,8 @@ const Uyg = {
       const c = Touge.bul(tur, 8, v.kaynak, { mahalleDahil: mahalleDahil });
       if (c.hata) { this.durum(c.hata, 'uyari'); this.tougeYaz(null); return; }
       this.tougeYaz(c);
+      /* Kamera zaten ilceye oturtuldu; sadece sec, ustune ucma. */
+      this.tougeIlkiSec(c, false);
       Cizer.kirlet();
       this.durum(ilce.ad + ' · ' + v.blok + ' blok' +
                  (Touge.sonElenenBlok ? ' (' + Touge.sonElenenBlok + ' blok ilce disinda, inmedi)' : '') + ' · ' +
@@ -1147,6 +1151,40 @@ const Uyg = {
     } catch (e) {
       this.durum('Ilce taramasi hata verdi: ' + e.message, 'hata');
     }
+  },
+
+  /* ------------------------------------------------------------
+     ARAMA BITINCE EN IYIYI SEC VE ORAYA GIT
+     ------------------------------------------------------------
+     Tarama bitiyordu ama kamera nerede kaldiysa orada kaliyordu;
+     sonucu gormek icin listeden birine tiklamak gerekiyordu.
+     Artik en yuksek puanli yol secilip ekrana sigdiriliyor.
+
+     ucusYap=false: ilce aramasinda kamera zaten ilceye oturtuldu,
+     ustune bir de yola dalmak "secince normal hale kuculsun"
+     istegiyle celisirdi. Orada sadece secim yapiliyor.
+     ------------------------------------------------------------ */
+  tougeIlkiSec(c, ucusYap) {
+    if (!c || !c.sonuc || !c.sonuc.length) return;
+    const y = c.sonuc[0];
+    Touge.secili = y;
+    this.tougeYaz(c);
+
+    if (ucusYap === false) { Cizer.kirlet(); return; }
+
+    /* Yolun kendi kutusuna sigdir: kisa yolda cok uzak, uzun yolda
+       cok yakin kalmasin. Pay 0.62 — yolun cevresi de gorunsun,
+       ekranin kenarina yapismasin. */
+    const n = y.olcum.ornek;
+    let g = Infinity, b = Infinity, k = -Infinity, d = -Infinity;
+    for (const p of n) {
+      if (p.lat < g) g = p.lat;
+      if (p.lon < b) b = p.lon;
+      if (p.lat > k) k = p.lat;
+      if (p.lon > d) d = p.lon;
+    }
+    this.gitKonumaYumusak((g + k) / 2, (b + d) / 2,
+                          this.kutuyaOlcek({ g: g, b: b, k: k, d: d }, 0.62));
   },
 
   /* Eleme kirilimi: kullanici NEYIN elendigini gorsun. Yoksa
