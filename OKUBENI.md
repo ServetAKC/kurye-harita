@@ -560,6 +560,50 @@ asiyor mu, tekrar var mi, **ara noktalar gercekten yolun uzerinde mi** ve
 bastan sona SIRALI mi. Sile-Agva'da olculdu: ara noktalarin yoldan en buyuk
 sapmasi 0.1 m.
 
+### Yer sec: zoom davranisi
+
+"Yer sec" e basinca ekran kendiliginden uzaklasiyor (olcek 0.08), ilce
+secilince secilen ilceye geri yakinlasiyor. Ikisi de YUMUSAK — kamera
+olcegi ana donguye birakiliyor, aniden set edilmiyor.
+
+Uzaklasma ONCE, indirme SONRA: sinir sorgusu ekranda gorunen kutuya gore
+yapiliyor, yakinken tek bir ilcenin ortasinda kaliniyor ve "ilce bulunamadi"
+cikiyordu.  yumusak zoom bitene kadar bekliyor; beklemeden
+sorsak dar kutuyu sorar, ilceler eksik gelirdi.
+
+Uzaklasirken MERKEZ yerinde kaliyor, sadece olcek degisiyor — kullanici
+nerede oldugunu kaybetmesin. Secim yapmadan cikilirsa kamera geldigi yere
+donuyor.
+
+Secilen ilceye yakinlasirken olcek  ile ilcenin kutusuna
+sigdiriliyor; sabit bir olcek kucuk ilcede cok uzak, buyuk ilcede cok yakin
+kalirdi. Izometrikte W x H metrelik kutu ekranda (W+H)*0.7071 genisligine
+yayiliyor, hesap ona gore.
+
+Secim yapilinca yollar ve binalar GERI GELIYOR (yakinlasip bos haritaya
+bakilmasin), ama sinir cizimi kaliyor — hangi ilcede oldugun gorunsun.
+
+Olculdu (=== acilis olcegi: 1.200 (yakin) ===
+  uzaklasma sonrasi olcek: 0.080
+  ara olcekler (13 adim): 0.168 -> 0.1041 -> 0.0936 -> 0.0878 -> 0.086 -> 0.0835 -> 0.0821 -> 0.0812 -> 0.0807 -> 0.0806 -> 0.0804 -> 0.0801 ...
+  ok  uzaklasti   1.200 -> 0.080
+  ok  zoom YUMUSAK (ara adimlar var)   13 ara deger
+  ok  ilce modu acildi
+  ok  yollar gizlendi
+
+=== ilce secimi ===
+  secilen: Güngören
+  secim sonrasi olcek: 0.159
+  ara olcekler (6 adim): 0.1317 -> 0.1528 -> 0.1577 -> 0.1584 -> 0.1587 -> 0.159
+  ok  geri yakinlasti   0.080 -> 0.159
+  ok  yakinlasma da YUMUSAK   6 ara deger
+  ok  yollar geri geldi
+  ok  sinir cizimi duruyor
+  ok  mod gez oldu
+
+SONUC: hepsi gecti): 1.200 -> 0.080 arasi 9 ara adim,
+0.080 -> 0.159 arasi 8 ara adim. Aniden set edilseydi tek adim olurdu.
+
 ### Baska bir yerde ara (bolgesel tarama)
 
 "Bu bolgede ara" sadece o an EKRANDA YUKLU karolara bakiyor, yani hep

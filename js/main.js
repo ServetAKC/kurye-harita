@@ -909,12 +909,87 @@ const Uyg = {
      ============================================================ */
   ilceModu: false,
   _ilceKatmanYedek: null,
+  _ilceKameraYedek: null,
+
+  /* Ilce modunun acilis olcegi. Ilceler 10-30 km genisliginde;
+     bu olcekte ekrana bir sehrin ilceleri sigiyor. ENAZ_OLCEK
+     0.075, o yuzden hemen ustunde duruluyor. */
+  ILCE_OLCEK: 0.08,
+
+  /* ------------------------------------------------------------
+     Bir cografi kutuyu ekrana sigdiran olcek (piksel/metre).
+     Izometrik yansitmada W x H metrelik kutu ekranda
+     (W+H)*IZO_X genisligine ve (W+H)*IZO_Y yuksekligine yayiliyor
+     — dondurulmus kare, kosegeni yatiyor. Ikisinden KUCUK olan
+     olcek secilir, yoksa bir yon tasar.
+     ------------------------------------------------------------ */
+  kutuyaOlcek(kt, pay) {
+    const W = Proj.mesafe(kt.g, kt.b, kt.g, kt.d);
+    const H = Proj.mesafe(kt.g, kt.b, kt.k, kt.b);
+    const toplam = Math.max(W + H, 1);
+    const o = Math.min(Kamera.genislik / (toplam * IZO_X),
+                       Kamera.yukseklik / (toplam * IZO_Y)) * (pay || 0.8);
+    return Math.max(this.ENAZ_OLCEK, Math.min(this.ENCOK_OLCEK, o));
+  },
+
+  /* Kameranin su anki merkezi, COGRAFI olarak. Metre saklamak ise
+     yaramaz: projeksiyon merkezi tasininca metre degerleri bayatlar. */
+  kameraMerkezi() {
+    const w = Kamera.dunyaya(Kamera.genislik / 2, Kamera.yukseklik / 2);
+    const c = Proj.cografiye(w.x, w.y);
+    return { lat: c.lat, lon: c.lon, olcek: Kamera.olcek };
+  },
+
+  /* Merkeze isinla ama olcegi YUMUSAK degistir. gitKonuma ikisini
+     de aniden yapiyor; burada zoom ana donguye birakiliyor. */
+  gitKonumaYumusak(lat, lon, olcek) {
+    this.merkezTasi(lat, lon);
+    const m = Proj.metreye(lat, lon);
+    Kamera.ortala(m.x, m.y);
+    this.hizX = this.hizY = 0;
+    this.zoomOdak = null;          // ekran merkezine gore yumusasin
+    if (olcek) this.hedefOlcek = olcek;
+    Cizer.kirlet();
+    this.karolariGuncelle(true);
+  },
+
+  /* Yumusak zoom bitene kadar bekle. Sinir sorgusu EKRANDAKI kutuya
+     gore yapildigi icin, zoom otururmadan sorarsak yanlis (dar)
+     kutuyu sorariz ve ilceler eksik gelir. */
+  olcekOturana(sure) {
+    const bitis = Date.now() + (sure || 4000);
+    return new Promise((coz) => {
+      const bak = () => {
+        if (Math.abs(this.hedefOlcek / Kamera.olcek - 1) < 0.01 || Date.now() > bitis) {
+          coz(); return;
+        }
+        setTimeout(bak, 60);
+      };
+      bak();
+    });
+  },
 
   async ilceModuAc() {
     if (this.ilceModu) { this.ilceModuKapat(); return; }
 
     if (Sinir.yukleniyor) return;
     Sinir.yukleniyor = true;
+    this.durum('Uzaklasiliyor...');
+
+    /* Once UZAKLAS, sonra indir. Sinir sorgusu ekranda gorunen
+       kutuya gore yapiliyor; yakinken tek bir ilcenin ortasinda
+       kaliniyor ve "ilce bulunamadi" cikiyordu. Kullanicinin elle
+       uzaklasmasini beklemek yerine kendimiz uzaklasiyoruz.
+       Merkez YERINDE kaliyor, sadece olcek degisiyor — nerede
+       oldugunu kaybetmesin. */
+    this._ilceKameraYedek = this.kameraMerkezi();
+    if (Kamera.olcek > this.ILCE_OLCEK) {
+      this.zoomOdak = null;
+      this.hedefOlcek = this.ILCE_OLCEK;
+      await this.olcekOturana(4000);
+      this.karolariGuncelle(true);
+    }
+
     this.durum('Ilce sinirlari iniyor...');
     try {
       /* Ekranda gorunen bolgenin ilceleri. Sinirlar buyuk oldugu
@@ -956,15 +1031,28 @@ const Uyg = {
     }
   },
 
-  ilceModuKapat() {
+  /* Gizlenen katmanlari geri ac. Sinir CIZIMINI kapatmaz: ilce
+     secildikten sonra yollar geri gelsin ama secilen ilcenin
+     sinirlari gorunmeye devam etsin. */
+  ilceKatmanlariGeriAl() {
+    if (!this._ilceKatmanYedek) return;
+    Object.assign(Cizer.katman, this._ilceKatmanYedek);
+    this._ilceKatmanYedek = null;
+    Cizer.katmanDegisti();
+  },
+
+  ilceModuKapat(geriGit) {
+    /* Secim yapilmadan cikildiysa kullanicinin bulundugu yere geri
+       don. Ilce secildiyse geriGit=false: orada kalmasi isteniyor. */
+    if (geriGit !== false && this._ilceKameraYedek) {
+      const m = this._ilceKameraYedek;
+      this.gitKonumaYumusak(m.lat, m.lon, m.olcek);
+    }
+    this._ilceKameraYedek = null;
     this.ilceModu = false;
     Sinir.aktif = false;
     if (this.mod === 'ilce') this.mod = 'gez';
-    if (this._ilceKatmanYedek) {
-      Object.assign(Cizer.katman, this._ilceKatmanYedek);
-      this._ilceKatmanYedek = null;
-      Cizer.katmanDegisti();
-    }
+    this.ilceKatmanlariGeriAl();
     const b = document.getElementById('ilceBtn');
     if (b) b.classList.remove('aktif');
     document.getElementById('tuval').style.cursor = '';
@@ -986,7 +1074,23 @@ const Uyg = {
     const boyM = Proj.mesafe(kt.g, kt.b, kt.k, kt.b) / 2;
     const km = Math.max(enM, boyM) / 1000;
 
-    this.gitKonuma(ilce.merkez.lat, ilce.merkez.lon, Math.max(Kamera.olcek, 0.3));
+    /* Secilen ilceye YUMUSAK yakinlas: merkez aninda kayiyor ama
+       olcek ana donguyle eriyor. Kutuya sigdirilıyor, sabit bir
+       olcek kucuk ilcede cok uzak, buyuk ilcede cok yakin kalirdi. */
+    this.gitKonumaYumusak(ilce.merkez.lat, ilce.merkez.lon, this.kutuyaOlcek(kt));
+
+    /* Secim yapildi: yollar ve binalar geri gelsin, yoksa yakinlasip
+       bos haritaya bakiyorsun. Sinir cizimi kaliyor — hangi ilcede
+       oldugun gorunsun. Mod da kapaniyor ki bir sonraki tiklama
+       yeni bir ilce taramasi baslatmasin. */
+    this.ilceKatmanlariGeriAl();
+    this.ilceModu = false;
+    this.mod = 'gez';
+    this._ilceKameraYedek = null;
+    const ib = document.getElementById('ilceBtn');
+    if (ib) ib.classList.remove('aktif');
+    document.getElementById('tuval').style.cursor = '';
+
     this.durum(ilce.ad + ' · ' + km.toFixed(1) + ' km · veri iniyor...');
 
     try {
