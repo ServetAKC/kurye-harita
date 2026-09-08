@@ -40,6 +40,9 @@ const Touge = {
   ORNEK_ARALIK: 25,        // metre — aci olcumu icin yeniden ornekleme
   ENAZ_UZUNLUK_VIRAJ: 700,
   ENAZ_UZUNLUK_DUZ: 1200,
+  /* Drag pisti icin ICINDEKI duzlugun alt siniri. 400 m: durup
+     kalkip 100 km/s'i gorebilecegin en kisa mesafe. */
+  ENAZ_DUZLUK: 400,
   BINA_YARICAP: 70,        // metre — bina aramasinin ust siniri
   /* Bina kosesi bu kadar yakinsa yol bina dibinden geciyor demek.
      12 m: iki sira bina arasindaki tipik sokak genisligi kaldirimla
@@ -145,16 +148,39 @@ const Touge = {
      okunuyor. Fusya hem bu siradan kopuk hem de arayuzun camgobegi
      vurgusuyla karismiyor (o renk "secili" demek).
      ============================================================ */
-  DERECELER: [
-    { harf: 'S', esik: 0.72, renk: '#e879f9', soluk: 'rgba(232,121,249,0.55)' },
-    { harf: 'A', esik: 0.62, renk: '#4ade80', soluk: 'rgba(74,222,128,0.55)' },
-    { harf: 'B', esik: 0.50, renk: '#facc15', soluk: 'rgba(250,204,21,0.55)' },
-    { harf: 'C', esik: 0,    renk: '#f43f5e', soluk: 'rgba(244,63,94,0.55)' }
-  ],
+  RENK: {
+    S: { renk: '#e879f9', soluk: 'rgba(232,121,249,0.55)' },
+    A: { renk: '#4ade80', soluk: 'rgba(74,222,128,0.55)' },
+    B: { renk: '#facc15', soluk: 'rgba(250,204,21,0.55)' },
+    C: { renk: '#f43f5e', soluk: 'rgba(244,63,94,0.55)' }
+  },
 
-  derece(puan) {
-    for (const d of this.DERECELER) if (puan >= d.esik) return d;
-    return this.DERECELER[this.DERECELER.length - 1];
+  /* ------------------------------------------------------------
+     ESIKLER TURE GORE AYRI
+     ------------------------------------------------------------
+     Tek olcek uc ture adil degil, cunku turlerin puan dagilimlari
+     farkli. Olculdu (dort bolge, tum adaylar):
+
+       tur    aday  ortanca   %90    en yuksek   0.72 ustu
+       viraj   156   0.468   0.657     0.820      %3.8
+       duz      17   0.472   0.633     0.654      %0.0
+       drag    228   0.501   0.717     0.923      %9.6
+
+     Sabit 0.72 esigiyle S, drag'de her on yoldan birine cikiyor,
+     duzde ise HIC cikamiyordu. Esikler her turun kendi dilimlerine
+     oturtuldu; boylece "S" her turde ayni seyi soyluyor: o turun
+     en ustteki birkac yuzdesi.
+     ------------------------------------------------------------ */
+  ESIKLER: {
+    viraj: { S: 0.72, A: 0.62, B: 0.50 },
+    duz:   { S: 0.63, A: 0.56, B: 0.47 },
+    drag:  { S: 0.78, A: 0.68, B: 0.55 }
+  },
+
+  derece(puan, tur) {
+    const e = this.ESIKLER[tur] || this.ESIKLER.viraj;
+    const harf = puan >= e.S ? 'S' : puan >= e.A ? 'A' : puan >= e.B ? 'B' : 'C';
+    return Object.assign({ harf: harf }, this.RENK[harf]);
   },
 
   sonuc: [],
@@ -527,6 +553,32 @@ const Touge = {
 
     const o = this.yenidenOrnekle(n, this.ORNEK_ARALIK);
 
+    /* ------------------------------------------------------------
+       EN UZUN DUZ PARCA — "drag pisti" turunun olcusu
+       ------------------------------------------------------------
+       "Duz" turu BUTUN yolun duz olmasini istiyor (kivrim <= 1.10).
+       Drag pisti farkli: yolun geri kalani kivrimli olsa bile
+       ICINDE uzun bir duzluk varsa is gorur. Kullanicinin ornegi
+       Kavakli Bulvari tam bu durumda — kivrimi 1.11 ile duz esigini
+       kil payi kaciriyor ama icinde basilacak duzlugu var.
+
+       Yaricap 150 m'nin uzerindeyse "duz" sayiliyor: 150 m yaricapli
+       bir yay 100 m'de ~38 derece dondurur, ondan genisi surerken
+       viraj hissi vermez.
+       ------------------------------------------------------------ */
+    let enUzunDuz = 0, suanDuz = 0;
+    for (let i = 2; i < o.length - 2; i++) {
+      const A = o[i - 2], B = o[i], C = o[i + 2];
+      const a1 = Math.hypot(B.x - A.x, B.y - A.y);
+      const b1 = Math.hypot(C.x - B.x, C.y - B.y);
+      const c1 = Math.hypot(C.x - A.x, C.y - A.y);
+      const alan = Math.abs((B.x - A.x) * (C.y - A.y) - (C.x - A.x) * (B.y - A.y)) / 2;
+      const R = alan < 1e-6 ? Infinity : (a1 * b1 * c1) / (4 * alan);
+      const d = Math.hypot(o[i].x - o[i - 1].x, o[i].y - o[i - 1].y);
+      if (R > 150) { suanDuz += d; if (suanDuz > enUzunDuz) enUzunDuz = suanDuz; }
+      else suanDuz = 0;
+    }
+
     /* Donus: ardisik iki parca arasindaki yon farkinin toplami.
        Bir tam donus 360 derece; km basina normalize ediliyor ki
        uzun yol otomatik "daha virajli" cikmasin. */
@@ -599,7 +651,7 @@ const Touge = {
       donusPerKm: donusPerKm, rakimAralik: rakimAralik, rakimKazanc: rakimKazanc,
       kavsakPerKm: kavsakPerKm, binaMesafe: binaMesafe, darlik: darlik,
       binaYogunluk: binaYogunluk, yolYogunluk: yolYogunluk,
-      manzara: manzara, ornek: o
+      enUzunDuz: enUzunDuz, manzara: manzara, ornek: o
     };
   },
 
@@ -619,10 +671,15 @@ const Touge = {
      Kullanicinin "burayi neden secmedin" sorusunu incelerken
      yakalandi: secondary bir bulvarda trafik 0.55 yerine 0.6
      goruldu. */
-  puanla(m, tur, rakimVar, yolTuru) {
+  puanla(m, tur, rakimVar, zincir) {
     const kirp = (v) => Math.max(0, Math.min(1, v));
+    /* Zincir nesnesi ya da sadece yol sinifi metni kabul ediliyor;
+       teshis betikleri metin geciyor. */
+    const yol = (typeof zincir === 'string') ? { tur: zincir } : (zincir || {});
+    const serit = yol.serit != null ? yol.serit : null;
+    const genislik = yol.genislik != null ? yol.genislik : null;
 
-    const trafik = this.trafikCarpani(yolTuru);
+    const trafik = this.trafikCarpani(yol.tur);
     /* Nis olma: az kavsak + binalardan uzak. 12 kavsak/km sehir ici
        demek. Bina terimi artik SAYI degil MESAFE: 40 m ve otesi tam
        puan, 10 m'de sifira yakin. Sayim yaniltiyordu — seyrek ama
@@ -673,6 +730,41 @@ const Touge = {
       for (const [v, w] of agirlik) p += v * w;
       return { puan: p, kivrimP: kivrimP, rakimP: rakimP, nis: nis, izbeP: izbeP,
                trafik: trafik, manzara: m.manzara, uzunP: uzunP };
+    }
+
+    /* ------------------------------------------------------------
+       DRAG PISTI
+       ------------------------------------------------------------
+       "Duz" turu BUTUN yolun duz olmasini sarta bagliyor. Drag
+       pistinde onemli olan ICINDEKI en uzun duzluk: yolun geri
+       kalani kivrimli olsa da bir yerinde basilacak duzluk varsa
+       is gorur.
+
+       Kullanicinin ornegi (Kavakli Bulvari) tam buraya dusuyor:
+       kivrimi 1.11 ile duz esigini (1.10) kil payi kaciriyor ama
+       icinde duzluk var.
+
+       Farklar:
+         - Uzunluk sarti ICINDEKI duzluge, yolun tamamina degil.
+         - Genis yol ARTI puan (touge'de onemsizdi): drag icin serit
+           sayisi ve genislik dogrudan ise yariyor. Etiketi olmayan
+           yol "bilinmiyor" (notr 0.5) sayiliyor, cezalandirilmiyor —
+           Turkiye'de bu etiketler zaten cogunlukla yok.
+         - Trafik yine onemli ama daha az agirlikli: bos bir bulvar
+           dar bir koy yolundan daha uygun.
+       ------------------------------------------------------------ */
+    if (tur === 'drag') {
+      if (m.enUzunDuz < this.ENAZ_DUZLUK) return null;
+      const duzP = kirp(m.enUzunDuz / 1500);
+      const uzunP = kirp(m.uzunluk / 4000);
+      /* Genislik: acikca yaziyorsa kullan, yoksa notr */
+      let genisP = 0.5;
+      if (serit != null) genisP = kirp((serit - 1) / 3);
+      else if (genislik != null) genisP = kirp((genislik - 4) / 8);
+      const p = duzP * 0.45 + nis * 0.20 + trafik * 0.13 +
+                genisP * 0.12 + uzunP * 0.10;
+      return { puan: p, duzP: duzP, nis: nis, izbeP: izbeP, trafik: trafik,
+               genisP: genisP, manzara: m.manzara, uzunP: uzunP };
     }
 
     // duz
@@ -988,7 +1080,7 @@ const Touge = {
     const rakimVar = !!Arazi.hazir;
 
     const zincirler = this.zincirle(yollar, mahalleDahil);
-    const turler = (tur === 'ikisi') ? ['viraj', 'duz'] : [tur];
+    const turler = (tur === 'ikisi') ? ['viraj', 'duz', 'drag'] : [tur];
     const bulunan = [];
 
     let darEle = 0;
@@ -1007,7 +1099,7 @@ const Touge = {
       if (!m) continue;
       if (m.darlik > this.ENCOK_DARLIK) darEle++;
       for (const t of turler) {
-        const p = this.puanla(m, t === 'viraj' ? 'viraj' : 'duz', rakimVar, z.tur);
+        const p = this.puanla(m, t, rakimVar, z);
         if (!p) continue;
         /* Trafik carpani puanin bileseni ama ayrica esik: ana arter
            ne kadar guzel olursa olsun touge degil. */

@@ -1307,7 +1307,7 @@ const Uyg = {
       return d;
     };
 
-    const drc = Touge.derece(y.puan);
+    const drc = Touge.derece(y.puan, y.tur);
     const bas = ekle('balonBaslik', '');
     const roz = document.createElement('b');
     roz.className = 'derece balonDerece';
@@ -1320,7 +1320,10 @@ const Uyg = {
     ekle('balonAlt', y.yolTuru + ' · ' + km + ' km · puan ' + y.puan.toFixed(2));
 
     /* Virajli yolda viraj bilgisi one cikiyor, duzde duzluk. */
-    if (y.tur === 'viraj') {
+    if (y.tur === 'drag') {
+      ekle('balonSatir', 'Icindeki en uzun duzluk ' + a.enUzunDuz + ' m');
+      ekle('balonSatir', a.viraj + ' viraj · toplam ' + km + ' km');
+    } else if (y.tur === 'viraj') {
       ekle('balonSatir', a.viraj + ' viraj · en dar ' +
            (a.enDarYaricap != null ? a.enDarYaricap + ' m yaricap' : 'olculemedi'));
       ekle('balonSatir', 'En dar virajda ~' + a.virajHizKm + ' km/s');
@@ -1422,7 +1425,7 @@ const Uyg = {
       /* Puan yerine HARF NOTU. Ham puan (0.83 gibi) tek basina bir sey
          soylemiyordu; harf bir bakista siralama veriyor. Ham puan
          ipucunda duruyor. */
-      const drc = Touge.derece(y.puan);
+      const drc = Touge.derece(y.puan, y.tur);
       const p = document.createElement('b');
       p.className = 'derece';
       p.textContent = drc.harf;
@@ -2062,7 +2065,7 @@ const Uyg = {
           });
           /* Renk artik harf notundan: C kirmizi, B sari, A yesil,
              S fusya. Secili olan tam doygun ve kalin. */
-          const d = Touge.derece(y.puan);
+          const d = Touge.derece(y.puan, y.tur);
           Cizer.rotaCiz(c, nokta, secili ? d.renk : d.soluk, secili ? 5 : 3);
         }
       }
