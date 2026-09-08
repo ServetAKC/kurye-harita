@@ -1020,6 +1020,195 @@ const Touge = {
     return u;
   },
 
+  /* ============================================================
+     AYRINTI — haritada tiklayinca acilan balonun icerigi
+     ------------------------------------------------------------
+     Viraj sayisi, en dar virajin yaricapi, egim ve o yarıcaptan
+     cikan tahmini hiz.
+
+     VIRAJ YARICAPI uc ardisik noktanin cevrel cember yaricapindan:
+       R = (a*b*c) / (4*Alan)
+     Ornek araligi 25 m; yaricap icin BIR ATLAYARAK (50 m acikliktaki
+     ucgen) hesaplaniyor. 25 m'lik ucgen kucuk aci hatalarina cok
+     duyarli, GPS/OSM gurultusu sahte keskin virajlar uretiyor.
+
+     HIZ TAHMINI yanal ivmeden:
+       v = sqrt(mu * g * R)
+     mu = 0.85 kuru asfalt + sokak lastigi icin makul bir deger;
+     g = 9.81. Bu bir TAHMIN, kesin degil: gercek hiz yol yuzeyine,
+     lastige, banka acisina ve suruse gore degisir. Ayrica yol
+     sinifinin makul hizi ust sinir olarak uygulaniyor — 500 m
+     yaricapli bir mahalle yolunda 200 km/s yazmasin.
+
+     DUZLUKTE ULASILAN HIZ: en uzun duz parcada, virajdan cikis
+     hiziyla baslayip a = 3 m/s2 ile hizlanma:
+       v = sqrt(v0^2 + 2*a*L)
+     3 m/s2 sivil bir arabanin makul ortalama ivmesi.
+     ============================================================ */
+  SURTUNME: 0.85,
+  YERCEKIMI: 9.81,
+  IVME: 3.0,
+  FREN: 6.0,     // m/s2 — fren hizlanmadan guclu
+  /* Bu acidan buyuk yon degisimi "viraj" sayiliyor. 25 derecenin
+     altindakiler yolun dogal salinimi. */
+  VIRAJ_ACI: 25,
+  /* Fizik ne derse desin dar bir dag yolunda 200 km/s yazmak sacma.
+     Tavan, tahminin makul kalmasi icin. */
+  GENEL_TAVAN: 130,
+
+  hizKm(v) { return Math.round(v * 3.6); },
+
+  ayrinti(y) {
+    if (y._ayrinti) return y._ayrinti;
+    const o = y.olcum.ornek;
+    const n = o.length;
+
+    /* --- viraj yaricaplari --- */
+    const yaricap = new Array(n).fill(Infinity);
+    for (let i = 2; i < n - 2; i++) {
+      const A = o[i - 2], B = o[i], C = o[i + 2];
+      const a = Math.hypot(B.x - A.x, B.y - A.y);
+      const b = Math.hypot(C.x - B.x, C.y - B.y);
+      const c = Math.hypot(C.x - A.x, C.y - A.y);
+      /* Ucgen alani (capraz carpim). Sifira yakinsa duz. */
+      const alan = Math.abs((B.x - A.x) * (C.y - A.y) - (C.x - A.x) * (B.y - A.y)) / 2;
+      if (alan < 1e-6) continue;
+      yaricap[i] = (a * b * c) / (4 * alan);
+    }
+
+    /* --- viraj sayisi: ayni yone donen ardisik parcalar TEK viraj --- */
+    let viraj = 0, enDar = Infinity;
+    let birikim = 0, yon = 0;
+    for (let i = 2; i < n - 1; i++) {
+      const a1 = Math.atan2(o[i].y - o[i - 1].y, o[i].x - o[i - 1].x);
+      const a2 = Math.atan2(o[i + 1].y - o[i].y, o[i + 1].x - o[i].x);
+      let f = (a2 - a1) * 180 / Math.PI;
+      while (f > 180) f -= 360;
+      while (f < -180) f += 360;
+
+      const buYon = Math.sign(f);
+      if (buYon !== yon && Math.abs(f) > 2) {
+        /* Yon degisti: onceki birikimi degerlendir */
+        if (Math.abs(birikim) >= this.VIRAJ_ACI) viraj++;
+        birikim = 0;
+        yon = buYon;
+      }
+      birikim += f;
+      if (yaricap[i] < enDar) enDar = yaricap[i];
+    }
+    if (Math.abs(birikim) >= this.VIRAJ_ACI) viraj++;
+
+    /* --- en uzun duz parca --- */
+    let enUzunDuz = 0, suan = 0;
+    for (let i = 2; i < n - 2; i++) {
+      const d = Math.hypot(o[i].x - o[i - 1].x, o[i].y - o[i - 1].y);
+      /* 150 m'den genis yaricap pratikte duz sayilir */
+      if (yaricap[i] > 150) { suan += d; if (suan > enUzunDuz) enUzunDuz = suan; }
+      else suan = 0;
+    }
+
+    /* --- egim ---
+       EGIM 100 METRELIK TABANDA olculuyor, ardisik ornekler arasinda
+       degil. Arazi karolarinin cozunurlugu ~30 m; 25 m'lik adimda
+       iki ornegin arasindaki birkac metrelik veri gurultusu dogrudan
+       egime yansiyordu. Olculdu: %384, %799 gibi imkansiz degerler
+       cikiyordu. 100 m taban gurultuyu yayip gercek egimi biraktiyor. */
+    let tirmanis = 0, inis = 0;
+    for (let i = 1; i < n; i++) {
+      const dz = (o[i].z || 0) - (o[i - 1].z || 0);
+      if (dz > 0) tirmanis += dz; else inis -= dz;
+    }
+    const TABAN = 100;
+    const egimler = [];
+    for (let i = 0; i < n; i++) {
+      let d = 0, j = i;
+      while (j + 1 < n && d < TABAN) {
+        d += Math.hypot(o[j + 1].x - o[j].x, o[j + 1].y - o[j].y);
+        j++;
+      }
+      if (d < TABAN * 0.8) break;          // yolun sonu, yarim taban olmaz
+      egimler.push(Math.abs(((o[j].z || 0) - (o[i].z || 0)) / d));
+    }
+    /* EN BUYUK degil %90'LIK DILIM. 100 m tabanda bile tek bir bozuk
+       yukseklik ornegi (ucurum kenari, kopru, karo dikisi) en buyugu
+       ele geciriyordu: olculdu, %162 ve %799 gibi imkansiz degerler.
+       Yuzdelik dilim tek tuk sicramaya dayanikli. */
+    egimler.sort((a, b) => a - b);
+    const enDikEgim = egimler.length
+      ? egimler[Math.min(egimler.length - 1, Math.floor(egimler.length * 0.9))] : 0;
+
+    /* --- hizlar ---
+       SINIF HIZI ARTIK UST SINIR DEGIL. YOL_STILI'ndeki hizlar rota
+       suresi icin konmus muhafazakar sehir ici degerleri
+       (unclassified 30 km/s). Onlarla kirpinca butun touge'ler
+       "30 km/s" cikiyordu ve viraj fizigi tamamen gorunmez oluyordu.
+
+       Simdi hiz yaricaptan hesaplaniyor, sadece makul bir tavanla
+       (GENEL_TAVAN) sinirlaniyor. Sinif hizi ayri bir bilgi olarak
+       balonda gosteriliyor — "bu yolda normalde ne kadar gidilir". */
+    const sinif = Ayristirici.stilBul(y.yolTuru);
+    const sinifHiz = (sinif.hiz || 50) / 3.6;             // m/s
+    /* Tavan yol sinifina gore. Sabit 130 tavaniyla BUTUN yollar 130
+       cikiyordu (olculdu: 8 sonucun 8'i), yani tavan butun isi
+       yapiyor ve sayi bilgi tasimiyordu.
+
+       Carpan 2.5: YOL_STILI hizlari rota suresi icin konmus
+       muhafazakar degerler (unclassified 30 km/s). Bos bir yolda
+       bunun ~2.5 kati makul bir ust sinir — dar bir koy yolunda
+       75 km/s, tertiary'de 100 km/s. Sezgisel bir carpan, kesin
+       bir olcum degil; sayi da zaten "tahmini" diye sunuluyor. */
+    const tavan = Math.min(this.GENEL_TAVAN / 3.6, sinifHiz * 2.5);
+    const virajHiz = isFinite(enDar)
+      ? Math.min(Math.sqrt(this.SURTUNME * this.YERCEKIMI * enDar), tavan)
+      : tavan;
+
+    /* --- ulasilabilen en yuksek hiz: ILERI-GERI HIZ PROFILI ---
+       "En uzun duzlukte virajdan cikis hiziyla hizlan" yanlisti:
+       225 m duzlukte 130 km/s cikiyordu ama o hiza ulassan SONRAKI
+       viraja giremezsin. Olculdu: 8 virajli 1.3 km'lik yolda tavan
+       hiz (130) yaziyordu.
+
+       Dogrusu her nokta icin bir hiz siniri kurup iki gecis yapmak:
+         ileri  — onceki noktadan IVME ile hizlanarak gelinebilen hiz
+         geri   — sonraki noktaya FREN ile yavaslayabilmek icin gereken
+       Her noktada bu ucunun en kucugu geceli hizdir; ulasilan en
+       yuksek hiz da o profilin tepesi. Yarisci "hiz profili"
+       hesabinin en yalin hali.
+
+       FREN 6 m/s2: sivil bir arabanin kuru asfaltta makul
+       yavaslamasi (IVME 3 m/s2'den buyuk, cunku fren hizlanmadan
+       daha guclu). */
+    const v = new Array(n);
+    for (let i = 0; i < n; i++) {
+      const R = yaricap[i];
+      v[i] = isFinite(R) ? Math.min(Math.sqrt(this.SURTUNME * this.YERCEKIMI * R), tavan) : tavan;
+    }
+    const ds = (i) => Math.hypot(o[i].x - o[i - 1].x, o[i].y - o[i - 1].y);
+    for (let i = 1; i < n; i++) {
+      v[i] = Math.min(v[i], Math.sqrt(v[i - 1] * v[i - 1] + 2 * this.IVME * ds(i)));
+    }
+    for (let i = n - 2; i >= 0; i--) {
+      v[i] = Math.min(v[i], Math.sqrt(v[i + 1] * v[i + 1] + 2 * this.FREN * ds(i + 1)));
+    }
+    let duzHiz = 0;
+    for (let i = 0; i < n; i++) if (v[i] > duzHiz) duzHiz = v[i];
+
+    y._ayrinti = {
+      viraj: viraj,
+      enDarYaricap: isFinite(enDar) ? Math.round(enDar) : null,
+      virajHizKm: this.hizKm(virajHiz),
+      enUzunDuz: Math.round(enUzunDuz),
+      enYuksekHizKm: this.hizKm(duzHiz),
+      sinifHizKm: this.hizKm(sinifHiz),
+      enDikEgim: +(enDikEgim * 100).toFixed(1),
+      tirmanis: Math.round(tirmanis),
+      inis: Math.round(inis),
+      bas: { lat: o[0].lat, lon: o[0].lon },
+      son: { lat: o[n - 1].lat, lon: o[n - 1].lon }
+    };
+    return y._ayrinti;
+  },
+
   /* Cizim icin yukseklikleri sakla. Her karede arazi ornegi almak
      8 sonuc x ~200 nokta = kare basina 1600 ornek ederdi; arazi
      verisi degismedikce (Arazi.surum) yeniden orneklenmiyor.

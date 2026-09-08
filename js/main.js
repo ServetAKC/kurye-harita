@@ -1229,6 +1229,121 @@ const Uyg = {
                           this.kutuyaOlcek({ g: g, b: b, k: k, d: d }, 0.62));
   },
 
+  /* ============================================================
+     HARITADA TOUGE'YE TIKLAMA — ayrinti balonu
+     ============================================================ */
+
+  /* Ekran noktasindan en yakin touge yolunu bul. Donen: {y, uzaklik}
+     Cizgiler ekranda ince oldugu icin tam uzerine basmak zor;
+     TIKLAMA_PAY piksellik tolerans var. */
+  TIKLAMA_PAY: 14,
+
+  tougeVur(sx, sy) {
+    let enIyi = null, enU = this.TIKLAMA_PAY;
+    for (const y of Touge.sonuc) {
+      Touge.cizimeHazirla(y);
+      const o = y.olcum.ornek;
+      let onceki = null;
+      for (const p of o) {
+        const m = Proj.metreye(p.lat, p.lon);
+        const e = Kamera.ekrana(m.x, m.y, Arazi.cz(p.z));
+        if (onceki) {
+          const u = this._noktaParcaUzakligi(sx, sy, onceki.sx, onceki.sy, e.sx, e.sy);
+          if (u < enU) { enU = u; enIyi = y; }
+        }
+        onceki = e;
+      }
+    }
+    return enIyi;
+  },
+
+  /* Noktanin dogru parcasina uzakligi (ekran pikseli) */
+  _noktaParcaUzakligi(px, py, ax, ay, bx, by) {
+    const dx = bx - ax, dy = by - ay;
+    const uz2 = dx * dx + dy * dy;
+    if (uz2 < 1e-9) return Math.hypot(px - ax, py - ay);
+    let t = ((px - ax) * dx + (py - ay) * dy) / uz2;
+    t = Math.max(0, Math.min(1, t));
+    return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
+  },
+
+  tougeBalonKapat() {
+    const b = document.getElementById('tougeBalon');
+    if (b) b.style.display = 'none';
+  },
+
+  tougeBalonAc(y, sx, sy) {
+    const b = document.getElementById('tougeBalon');
+    if (!b) return;
+    const a = Touge.ayrinti(y);
+    const km = (y.olcum.uzunluk / 1000).toFixed(2);
+    const koord = a.bas.lat.toFixed(6) + ', ' + a.bas.lon.toFixed(6);
+
+    b.innerHTML = '';
+    const ekle = (sinif, metin) => {
+      const d = document.createElement('div');
+      d.className = sinif;
+      d.textContent = metin;
+      b.appendChild(d);
+      return d;
+    };
+
+    ekle('balonBaslik', y.ad);
+    ekle('balonAlt', y.yolTuru + ' · ' + km + ' km · puan ' + y.puan.toFixed(2));
+
+    /* Virajli yolda viraj bilgisi one cikiyor, duzde duzluk. */
+    if (y.tur === 'viraj') {
+      ekle('balonSatir', a.viraj + ' viraj · en dar ' +
+           (a.enDarYaricap != null ? a.enDarYaricap + ' m yaricap' : 'olculemedi'));
+      ekle('balonSatir', 'En dar virajda ~' + a.virajHizKm + ' km/s');
+    } else {
+      ekle('balonSatir', 'En uzun duzluk ' + a.enUzunDuz + ' m · ' + a.viraj + ' viraj');
+    }
+    ekle('balonVurgu', 'Tahmini en yuksek hiz  ~' + a.enYuksekHizKm + ' km/s');
+    ekle('balonSatir', 'Yol sinifinin normal hizi ~' + a.sinifHizKm + ' km/s');
+    ekle('balonSatir', 'Yokus: en dik %' + a.enDikEgim +
+         ' · tirmanis ' + a.tirmanis + ' m · inis ' + a.inis + ' m');
+
+    const kSatir = document.createElement('div');
+    kSatir.className = 'balonSatir balonKoord';
+    kSatir.textContent = koord;
+    kSatir.appendChild(this.kopyaDugmesi(a.bas.lat, a.bas.lon, 'Baslangic koordinatini kopyala'));
+    b.appendChild(kSatir);
+
+    const bag = document.createElement('a');
+    bag.className = 'balonBag';
+    bag.href = Touge.mapsBaglantisi(y);
+    bag.target = '_blank';
+    bag.rel = 'noopener noreferrer';
+    bag.textContent = 'Google Maps\'te ac ↗';
+    b.appendChild(bag);
+
+    const kapat = document.createElement('button');
+    kapat.className = 'balonKapat';
+    kapat.textContent = '✕';
+    kapat.title = 'Kapat';
+    kapat.onclick = (e) => { e.stopPropagation(); this.tougeBalonKapat(); };
+    b.appendChild(kapat);
+
+    /* Once goster, sonra yerlestir: olculeri bilmeden ekran disina
+       tasip tasmadigini anlayamiyoruz. */
+    b.style.display = 'block';
+    b.style.left = '0px';
+    b.style.top = '0px';
+    const g = b.offsetWidth, yk = b.offsetHeight;
+    const anaK = document.querySelector('main').getBoundingClientRect();
+    let x = sx + 14, t = sy + 14;
+    if (x + g > anaK.width - 8) x = sx - g - 14;
+    if (t + yk > anaK.height - 8) t = sy - yk - 14;
+    b.style.left = Math.max(8, x) + 'px';
+    b.style.top = Math.max(8, t) + 'px';
+
+    /* Tiklanan yol ayni zamanda seciliyor: haritada parlasin,
+       listede de vurgulansin. */
+    Touge.secili = y;
+    Cizer.kirlet();
+  },
+
   /* Eleme kirilimi: kullanici NEYIN elendigini gorsun. Yoksa
      "burada iyi yol yok" ile "filtre fazla sert" ayirt edilemiyor. */
   tougeEleme(c) {
@@ -1740,7 +1855,20 @@ const Uyg = {
   },
 
   tikla(e) {
-    if (this.mod === 'gez') return;
+    const tr = document.getElementById('tuval').getBoundingClientRect();
+    const sx = e.clientX - tr.left, sy = e.clientY - tr.top;
+
+    /* GEZ modunda haritadaki touge yollarina tiklanabiliyor:
+       ayrinti balonu aciliyor. Balon aciksa ve bosluga tiklandiysa
+       kapaniyor. Diger modlarin isleyisi degismiyor. */
+    if (this.mod === 'gez') {
+      if (!Touge.sonuc.length) return;
+      const y = this.tougeVur(sx, sy);
+      if (y) this.tougeBalonAc(y, sx, sy);
+      else this.tougeBalonKapat();
+      return;
+    }
+    this.tougeBalonKapat();
     const r = document.getElementById('tuval').getBoundingClientRect();
     const w = Kamera.dunyayaArazi(e.clientX - r.left, e.clientY - r.top);
 
