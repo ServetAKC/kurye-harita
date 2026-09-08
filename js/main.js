@@ -1382,6 +1382,17 @@ const Uyg = {
     }
     ekle('balonVurgu', 'Tahmini en yuksek hiz  ~' + a.enYuksekHizKm + ' km/s');
     ekle('balonSatir', 'Yol sinifinin normal hizi ~' + a.sinifHizKm + ' km/s');
+
+    /* Genislik ve trafik puanin iki agir bileseni; hangisinden
+       not aldigini gormeden kullanici sonuca guvenemiyor. */
+    const genisMetin = y.serit != null ? y.serit + ' serit'
+      : y.genislik != null ? y.genislik.toFixed(1).replace('.0', '') + ' m genis'
+      : 'genislik etiketsiz (' + y.yolTuru + ' sinifindan tahmin)';
+    const tr = y.trafik;
+    const trafikMetin = tr == null ? 'trafik bilinmiyor'
+      : tr >= 0.85 ? 'cok sakin' : tr >= 0.6 ? 'sakin'
+      : tr >= 0.35 ? 'orta yogunlukta' : 'yogun';
+    ekle('balonSatir', genisMetin + ' · ' + trafikMetin);
     ekle('balonSatir', 'Yokus: en dik %' + a.enDikEgim +
          ' · tirmanis ' + a.tirmanis + ' m · inis ' + a.inis + ' m');
 

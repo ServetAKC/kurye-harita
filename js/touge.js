@@ -159,22 +159,26 @@ const Touge = {
      ESIKLER TURE GORE AYRI
      ------------------------------------------------------------
      Tek olcek uc ture adil degil, cunku turlerin puan dagilimlari
-     farkli. Olculdu (dort bolge, tum adaylar):
+     farkli. GENISLIK bileseni eklenip agirliklar yeniden
+     dagitildiktan sonra yeniden olculdu (dort bolge, tum adaylar):
 
-       tur    aday  ortanca   %90    en yuksek   0.72 ustu
-       viraj   156   0.468   0.657     0.820      %3.8
-       duz      17   0.472   0.633     0.654      %0.0
-       drag    228   0.501   0.717     0.923      %9.6
+       tur    aday  ortanca   %65     %90     %96   en yuksek
+       viraj   208   0.471   0.535   0.657   0.724    0.813
+       duz      17   0.549   0.564   0.668   0.686    0.686
+       drag    231   0.555   0.589   0.751   0.801    0.980
 
-     Sabit 0.72 esigiyle S, drag'de her on yoldan birine cikiyor,
-     duzde ise HIC cikamiyordu. Esikler her turun kendi dilimlerine
-     oturtuldu; boylece "S" her turde ayni seyi soyluyor: o turun
-     en ustteki birkac yuzdesi.
+     Esikler her turun kendi dilimlerine oturtuldu: S ~ust %4,
+     A ~ust %10, B ~ust %35. Boylece "S" her turde ayni seyi
+     soyluyor: o turun en ustteki birkac yuzdesi. Duz turunde
+     aday az (17) oldugu icin dilimler gurultulu, o yuzden esikleri
+     virajla uyumlu kalacak sekilde yuvarladik — ama yukari degil
+     asagi: %96 dilimi (0.686) listenin en tepesine denk geldigi
+     icin 0.69 dersek S hicbir duz yola ulasmaz, harf olu kalirdi.
      ------------------------------------------------------------ */
   ESIKLER: {
-    viraj: { S: 0.72, A: 0.62, B: 0.50 },
-    duz:   { S: 0.63, A: 0.56, B: 0.47 },
-    drag:  { S: 0.78, A: 0.68, B: 0.55 }
+    viraj: { S: 0.72, A: 0.66, B: 0.54 },
+    duz:   { S: 0.68, A: 0.64, B: 0.55 },
+    drag:  { S: 0.80, A: 0.75, B: 0.59 }
   },
 
   derece(puan, tur) {
@@ -697,6 +701,39 @@ const Touge = {
        puan, 10 m'de sifira yakin. Sayim yaniltiyordu — seyrek ama
        yol dibinde duran birkac bina ile uzakta duran yuzlerce bina
        ayni puani aliyordu. */
+    /* ------------------------------------------------------------
+       GENISLIK — her turde, sadece drag'de degil
+       ------------------------------------------------------------
+       Kullanici: "genisligi de ekle, 2 serit olan her yol daha iyi,
+       illa drag icin degil".
+
+       Kaynak sirasi: lanes etiketi > width etiketi > yol sinifi.
+       Olculdu (dort bolge, 10607 yol): lanes %8.7'sinde var
+       (253 tek, 461 iki, 131 uc, 76 dort serit), width sadece
+       %0.1'inde. Yani %91 icin siniftan cikarim yapmak sart —
+       yoksa bilesen neredeyse hep notr kalir ve hicbir is yapmaz.
+
+       IKI SERIT EN IYI, daha fazlasi degil. Tek serit dar, karsidan
+       gelene yer yok; iki serit normal bir yol; dort-bes serit ise
+       ana arter demek, zaten trafik carpani onu ayrica cezalandiriyor
+       ama genislikten de odul almamali.
+
+       Sinif genisligi ile trafik carpani AYNI SEY DEGIL: secondary
+       genis (iyi) ama kalabalik (kotu); unclassified dar ama issiz.
+       Ikisi birbirini dengeliyor.
+       ------------------------------------------------------------ */
+    const SERIT_PUAN = { 1: 0.20, 2: 1.00, 3: 0.90, 4: 0.70 };
+    let genisP;
+    if (serit != null) genisP = SERIT_PUAN[serit] !== undefined ? SERIT_PUAN[serit] : 0.50;
+    else if (genislik != null) genisP = kirp((genislik - 3) / 5);
+    else {
+      /* Sinifin cizim genisligi (YOL_STILI.en) metreye yakin bir
+         vekil: unclassified/residential 7, tertiary 8.5, secondary 10.
+         5 m'yi taban, 11 m'yi tavan sayiyoruz. */
+      const en = (Ayristirici.stilBul(yol.tur) || {}).en || 7;
+      genisP = kirp((en - 5) / 6);
+    }
+
     const kavsakP = kirp(1 - m.kavsakPerKm / 12);
     const binaP = kirp((m.binaMesafe - 10) / 30);
     /* IZBELIK: toplumdan uzaklik. binaP sadece 70 m'ye kadar bakiyor
@@ -735,13 +772,27 @@ const Touge = {
          "dag gecidi degil, sehrin icinde kivrimli yol da olur".
          Rakim agirligi 0.20'den 0.10'a indi; dusen agirlik
          kivrimliliga ve nis olmaya gitti. */
+      /* Kullanicinin verdigi yon: "az kullanilan, dusuk trafik yerler
+         olucak; uzunluk her sey degil, viraj da degil". Buna gore
+         trafik 0.10 -> 0.17, genislik yeni 0.12, uzunluk 0.12 -> 0.06,
+         kivrimlilik 0.38 -> 0.36.
+
+         Kivrimlilik ilk denemede 0.30'a indirilmisti; olcunce
+         Buyukcekmece kuzeyinde secilen yollarin ortalama donusu
+         173 -> 159 derece/km'ye dustu, yani "virajli" listesinin
+         basina neredeyse duz yollar cikmaya basladi. Virajlilik bu
+         turun tanimi; 0.36'da hem tanim korunuyor (dort bolgede
+         184-572 derece/km, bolge ortancasinin 1.5-2.4 kati) hem de
+         trafik ve genislik gercek agirlik tasiyor. */
       const agirlik = rakimVar
-        ? [[kivrimP, 0.38], [nis, 0.32], [uzunP, 0.12], [trafik, 0.10], [rakimP, 0.06], [m.manzara, 0.02]]
-        : [[kivrimP, 0.42], [nis, 0.34], [uzunP, 0.12], [trafik, 0.10], [m.manzara, 0.02]];
+        ? [[kivrimP, 0.36], [nis, 0.24], [trafik, 0.17], [genisP, 0.12],
+           [uzunP, 0.06], [rakimP, 0.03], [m.manzara, 0.02]]
+        : [[kivrimP, 0.38], [nis, 0.25], [trafik, 0.17], [genisP, 0.12],
+           [uzunP, 0.06], [m.manzara, 0.02]];
       let p = 0;
       for (const [v, w] of agirlik) p += v * w;
       return { puan: p, kivrimP: kivrimP, rakimP: rakimP, nis: nis, izbeP: izbeP,
-               trafik: trafik, manzara: m.manzara, uzunP: uzunP };
+               trafik: trafik, genisP: genisP, manzara: m.manzara, uzunP: uzunP };
     }
 
     /* ------------------------------------------------------------
@@ -769,12 +820,7 @@ const Touge = {
       if (m.enUzunDuz < this.ENAZ_DUZLUK) return null;
       const duzP = kirp(m.enUzunDuz / 1500);
       const uzunP = kirp(m.uzunluk / 4000);
-      /* Genislik: acikca yaziyorsa kullan, yoksa notr */
-      let genisP = 0.5;
-      if (serit != null) genisP = kirp((serit - 1) / 3);
-      else if (genislik != null) genisP = kirp((genislik - 4) / 8);
-      const p = duzP * 0.45 + nis * 0.20 + trafik * 0.13 +
-                genisP * 0.12 + uzunP * 0.10;
+      const p = duzP * 0.34 + nis * 0.20 + genisP * 0.20 + trafik * 0.16 + uzunP * 0.10;
       return { puan: p, duzP: duzP, nis: nis, izbeP: izbeP, trafik: trafik,
                genisP: genisP, manzara: m.manzara, uzunP: uzunP };
     }
@@ -802,9 +848,10 @@ const Touge = {
        Manzara agirligi duzde daha yuksek — duz bir yolu surulmeye
        deger yapan sey zaten manzarasi. Uzunluk da duzde daha onemli:
        basilacak yolun kisasi olmaz. */
-    let p = duzP * 0.32 + nis * 0.28 + uzunP * 0.18 + trafik * 0.12 + m.manzara * 0.10;
+    let p = duzP * 0.26 + nis * 0.24 + trafik * 0.18 + genisP * 0.14 +
+            uzunP * 0.10 + m.manzara * 0.08;
     return { puan: p, duzP: duzP, nis: nis, izbeP: izbeP, trafik: trafik,
-             manzara: m.manzara, uzunP: uzunP };
+             genisP: genisP, manzara: m.manzara, uzunP: uzunP };
   },
 
   /* Ekranda yuklu olan karolardan kaynak kumesi */

@@ -25,16 +25,31 @@ const bekle = (ms) => new Promise(r => setTimeout(r, ms));
   for(let i=0;i<40;i++){await bekle(500); try{if(/complete.*kurye/.test(await ev('document.readyState+" "+location.pathname')))break;}catch(e){}}
   for(let i=0;i<60;i++){ if((await ev('Touge.yollariTopla().length'))>300) break; await bekle(1000); }
 
-  console.log('=== esik tablosu ===');
-  const t2 = JSON.parse(await ev('JSON.stringify(Touge.DERECELER)'));
-  for (const d of t2) console.log('  ' + d.harf + '  >= ' + d.esik.toFixed(2) + '   ' + d.renk);
+  console.log('=== esik tablosu (ture gore) ===');
+  const t2 = JSON.parse(await ev('JSON.stringify(Touge.ESIKLER)'));
+  for (const tur of Object.keys(t2))
+    console.log('  ' + tur.padEnd(6) + 'S >= ' + t2[tur].S.toFixed(2) +
+                '   A >= ' + t2[tur].A.toFixed(2) + '   B >= ' + t2[tur].B.toFixed(2) + '   altisi C');
 
-  console.log('\n=== sinir degerleri dogru harfi veriyor mu ===');
-  const dn = JSON.parse(await ev('JSON.stringify([0.35,0.49,0.50,0.61,0.62,0.71,0.72,0.90].map(function(p){return {p:p, h:Touge.derece(p).harf};}))'));
-  for (const x of dn) console.log('    ' + x.p.toFixed(2) + ' -> ' + x.h);
-  const bekleniyor = { '0.35':'C','0.49':'C','0.5':'B','0.61':'B','0.62':'A','0.71':'A','0.72':'S','0.9':'S' };
-  kontrol('esikler dogru calisiyor', dn.every(x => bekleniyor[String(x.p)] === x.h),
-          dn.filter(x=>bekleniyor[String(x.p)]!==x.h).map(x=>x.p+'->'+x.h).join(', ') || 'hepsi dogru');
+  console.log('');
+  console.log('=== sinir degerleri dogru harfi veriyor mu ===');
+  /* Her turun kendi esikleri var. Beklenen tabloyu ESIKLER'den
+     uretiyoruz ki esikler yeniden ayarlandiginda test kendiliginden
+     guncellensin, elle bakim gerektirmesin. */
+  const ornekler = [];
+  for (const tur of Object.keys(t2)) {
+    const e = t2[tur];
+    ornekler.push([tur, +(e.B - 0.01).toFixed(2), 'C'], [tur, e.B, 'B'],
+                  [tur, +(e.A - 0.01).toFixed(2), 'B'], [tur, e.A, 'A'],
+                  [tur, +(e.S - 0.01).toFixed(2), 'A'], [tur, e.S, 'S']);
+  }
+  const dn = JSON.parse(await ev('JSON.stringify(' + JSON.stringify(ornekler) +
+    '.map(function(o){ return { tur:o[0], p:o[1], bek:o[2], h:Touge.derece(o[1],o[0]).harf }; }))'));
+  for (const x of dn)
+    console.log('    ' + x.tur.padEnd(6) + x.p.toFixed(2) + ' -> ' + x.h +
+                (x.h === x.bek ? '' : '   BEKLENEN ' + x.bek));
+  kontrol('esikler ture gore dogru calisiyor', dn.every(x => x.h === x.bek),
+          dn.filter(x => x.h !== x.bek).map(x => x.tur + ' ' + x.p + '->' + x.h).join(', ') || 'hepsi dogru');
 
   console.log('\n=== dort bolgede harf dagilimi ===');
   const yerler = [[41.0011,28.6417,'Beylikduzu'],[41.1755,29.6122,'Sile'],
@@ -47,9 +62,9 @@ const bekle = (ms) => new Promise(r => setTimeout(r, ms));
       '  if (v.hata) return JSON.stringify({hata:v.hata});',
       '  var c = Touge.bul("ikisi", 9999, v.kaynak, {mahalleDahil:false});',
       '  var s = {S:0,A:0,B:0,C:0};',
-      '  (c.sonuc||[]).forEach(function(y){ s[Touge.derece(y.puan).harf]++; });',
+      '  (c.sonuc||[]).forEach(function(y){ s[Touge.derece(y.puan, y.tur).harf]++; });',
       '  var ilk = (c.sonuc||[]).slice(0,3).map(function(y){',
-      '    return Touge.derece(y.puan).harf + " " + y.puan.toFixed(2); });',
+      '    return Touge.derece(y.puan, y.tur).harf + " " + y.puan.toFixed(2); });',
       '  return JSON.stringify({say:s, ilk:ilk});',
       '})()'
     ].join('\n')));

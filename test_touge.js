@@ -68,7 +68,11 @@ const YERLER = [
 
     for (const tur of ['viraj', 'duz']) {
       const c = await ev('JSON.stringify((function(){var c=Touge.bul("' + tur + '",5);' +
+        'var hepsi=Touge.bul("' + tur + '",9999).sonuc||[];' +
+        'var d=hepsi.map(function(y){return y.olcum.donusPerKm;}).sort(function(a,b){return a-b;});' +
+        'var ortancaDonus=d.length?Math.round(d[Math.floor(d.length/2)]):0;' +
         'return {toplam:c.toplam,ms:c.ms,zincir:c.zincir,darEle:c.darEle,rakimVar:c.rakimVar,' +
+        'ortancaDonus:ortancaDonus,' +
         'liste:(c.sonuc||[]).map(function(y){return {ad:y.ad,tur:y.yolTuru,parca:y.parca,' +
         'km:+(y.olcum.uzunluk/1000).toFixed(2),donus:Math.round(y.olcum.donusPerKm),' +
         'kivrim:+y.olcum.kivrim.toFixed(3),rakim:Math.round(y.olcum.rakimAralik),' +
@@ -103,7 +107,11 @@ const YERLER = [
       if (tur === 'viraj') {
         const ort = r.liste.reduce((s, y) => s + y.donus, 0) / r.liste.length;
         console.log('    ortalama donus: ' + Math.round(ort) + '°/km');
-        if (ort < 200) { console.log('    X virajli denilen yollar yeterince donmuyor'); hata.push(yer.ad + '/viraj'); }
+        console.log('    bolgenin ortanca adayi: ' + r.ortancaDonus + '°/km');
+        if (ort < r.ortancaDonus * 1.3) {
+          console.log('    X virajli denilen yollar bolge ortancasindan yeterince donmuyor');
+          hata.push(yer.ad + '/viraj');
+        }
       } else {
         const ort = r.liste.reduce((s, y) => s + y.kivrim, 0) / r.liste.length;
         const ortD = r.liste.reduce((s, y) => s + y.donus, 0) / r.liste.length;
