@@ -397,12 +397,26 @@ const Touge = {
       return a.tur === b.tur;
     };
 
-    /* Bir ucta devam eden TEK aday varsa onu dondur. */
+    /* ------------------------------------------------------------
+       Bir ucta devam eden TEK aday varsa onu dondur.
+       ------------------------------------------------------------
+       "Birden cok aday varsa EN AZ SAPANI sec" denendi ve GERI
+       ALINDI. Gerekcesi vardi: bolunmus bulvarlarda gidis/donus
+       govdeleri ayni ismi tasidigi icin kavsakta hep birden cok
+       aday cikiyor ve zincir uzamiyordu (Kavakli Bulvari ~1.5 km
+       iken dort ayri ~0.7 km'lik parcaya bolunmustu).
+
+       Ama olculdu ve KALITEYI BOZDU: zincirler uzayinca virajli
+       kesimler duz kesimlerle ortalaniyor ve kivrimlilik olcusu
+       sulanıyor. Beylikduzu'nde virajli listesinin ortalama donusu
+       459 -> 247 derece/km, Belgrad'da 680 -> 551 dustu. Ustelik
+       hedeflenen yolu da birlestirmedi.
+
+       Muhafazakar kural kaliyor: belirsizse birlestirme.
+       ------------------------------------------------------------ */
     const devam = (y, nid, kullanilan) => {
       const adaylar = (uc.get(nid) || []).filter(
         (o) => o !== y && !kullanilan.has(o.id) && ayniYol(y, o));
-      /* Kavsakta iki farkli devam varsa hangisi oldugu belirsiz:
-         birlestirme, cunku yanlis kolu eklemek zinciri uydurur. */
       return adaylar.length === 1 ? adaylar[0] : null;
     };
 
@@ -595,10 +609,20 @@ const Touge = {
      carpimda tek bir sifir her seyi siliyor, oysa rakimsiz ama
      cok kivrimli issiz bir yol da iyi bir yoldur.
      ------------------------------------------------------------ */
-  puanla(m, tur, rakimVar) {
+  /* tur      : tarama turu, 'viraj' ya da 'duz'
+     yolTuru  : OSM yol sinifi (secondary, unclassified, ...)
+
+     IKISI AYRI OLMAK ZORUNDA. Onceden tek bir `tur` vardi ve
+     trafikCarpani'ye O gidiyordu: trafikCarpani('viraj') tabloda
+     bulunamayip varsayilan 0.6'ya dusuyordu, yani trafik bileseni
+     BUTUN yollarda sabitti ve puanin %10-16'si oluu is yapiyordu.
+     Kullanicinin "burayi neden secmedin" sorusunu incelerken
+     yakalandi: secondary bir bulvarda trafik 0.55 yerine 0.6
+     goruldu. */
+  puanla(m, tur, rakimVar, yolTuru) {
     const kirp = (v) => Math.max(0, Math.min(1, v));
 
-    const trafik = this.trafikCarpani(tur);
+    const trafik = this.trafikCarpani(yolTuru);
     /* Nis olma: az kavsak + binalardan uzak. 12 kavsak/km sehir ici
        demek. Bina terimi artik SAYI degil MESAFE: 40 m ve otesi tam
        puan, 10 m'de sifira yakin. Sayim yaniltiyordu — seyrek ama
@@ -983,7 +1007,7 @@ const Touge = {
       if (!m) continue;
       if (m.darlik > this.ENCOK_DARLIK) darEle++;
       for (const t of turler) {
-        const p = this.puanla(m, t === 'viraj' ? 'viraj' : 'duz', rakimVar);
+        const p = this.puanla(m, t === 'viraj' ? 'viraj' : 'duz', rakimVar, z.tur);
         if (!p) continue;
         /* Trafik carpani puanin bileseni ama ayrica esik: ana arter
            ne kadar guzel olursa olsun touge degil. */

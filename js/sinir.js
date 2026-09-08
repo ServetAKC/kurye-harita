@@ -295,5 +295,7 @@ const Sinir = {
     return null;
   },
 
-  temizle() { this.ilceler = []; this.secili = null; this.uzerinde = null; this.aktif = false; }
+  temizle() {
+    this.ilceler = []; this.secili = null; this.uzerinde = null; this.aktif = false;
+  }
 };
