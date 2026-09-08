@@ -74,6 +74,7 @@ const YERLER = [
         'kivrim:+y.olcum.kivrim.toFixed(3),rakim:Math.round(y.olcum.rakimAralik),' +
         'kavsak:Math.round(y.olcum.kavsakPerKm),bina:Math.round(y.olcum.binaMesafe),' +
         'darlik:+y.olcum.darlik.toFixed(2),gen:y.genislik,' +
+        'izbe:+y.izbeP.toFixed(2),yog:Math.round(y.olcum.binaYogunluk),' +
         'manzara:+y.olcum.manzara.toFixed(2),' +
         'puan:+y.puan.toFixed(3)};})};})())');
       const r = JSON.parse(c);
@@ -85,7 +86,7 @@ const YERLER = [
                     String(y.donus).padStart(4) + '°/km  kivrim ' + y.kivrim.toFixed(2) +
                     '  rakim ' + String(y.rakim).padStart(3) + ' m  ' +
                     String(y.kavsak).padStart(2) + ' kavsak/km  ' +
-                    String(y.bina).padStart(2) + ' m bina  dib %' + String(Math.round(y.darlik*100)).padStart(2) + '  su ' + y.manzara.toFixed(2) + '  ' +
+                    String(y.bina).padStart(2) + ' m bina  izbe ' + y.izbe.toFixed(2) + '  ' + String(y.yog).padStart(4) + ' bina/km2  su ' + y.manzara.toFixed(2) + '  ' +
                     y.tur + '  ' + y.ad.slice(0, 34));
       }
       /* Dar sokak elemesi: sonuclarin HICBIRI bina dibinden gecmemeli.

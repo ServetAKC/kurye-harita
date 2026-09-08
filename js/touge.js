@@ -107,17 +107,61 @@ const Touge = {
      once dogru mesafeyi olcmek gerekiyor. */
   binalariTopla() {
     const gorulen = new Set();
-    const kose = [];
+    const kose = [], merkez = [];
     for (const k of Karolar.depo.values()) {
       if (!k.blok || !k.blok.sekil) continue;
       for (const b of k.blok.sekil.binalar) {
         if (gorulen.has(b.id)) continue;
         gorulen.add(b.id);
         if (!b.nokta || !b.nokta.length) continue;
-        for (const p of b.nokta) kose.push({ x: p.x, y: p.y });
+        let sx = 0, sy = 0;
+        for (const p of b.nokta) { kose.push({ x: p.x, y: p.y }); sx += p.x; sy += p.y; }
+        /* Merkezler AYRI toplaniyor: yogunluk sayarken kose degil BINA
+           saymak lazim, yoksa cok kosesi olan bir bina on ev sayilir. */
+        merkez.push({ x: sx / b.nokta.length, y: sy / b.nokta.length });
       }
     }
-    return kose;
+    return { kose: kose, merkez: merkez };
+  },
+
+  /* ------------------------------------------------------------
+     IZBELIK — "toplumdan ne kadar uzak"
+     ------------------------------------------------------------
+     En yakin binaya mesafe bu isi goremiyor: arama 70 m'de kesiliyor,
+     yani 70 m otede tek bir kulube olan yol ile 5 km icinde hicbir sey
+     olmayan yol ayni puani aliyor. Kullanicinin istegi tam bunun
+     tersi: "toplumdan ne kadar uzaksa o kadar puan".
+
+     Cozum: kaba bir YOGUNLUK izgarasi. 200 m'lik hucrelere bina
+     sayilari onceden yaziliyor; bir yol noktasi icin 3x3 hucre
+     toplaniyor (600x600 m = 0.36 km2). Boylece genis alana tek
+     bakista bakiliyor, her nokta icin yuzlerce binayi taramadan.
+     ------------------------------------------------------------ */
+  IZBE_HUCRE: 200,
+  /* Yumusak azalma, sert kesme degil: sert kesmede butun sehir ici
+     0 olup birbirinden ayirt edilemez hale geliyordu.
+     0 bina/km2 -> 1.00,  150 -> 0.50,  450 -> 0.25,  1500 -> 0.09 */
+  IZBE_YARI: 150,
+
+  izbeIzgarasi(merkezler) {
+    const H = this.IZBE_HUCRE, g = new Map();
+    for (const m of merkezler) {
+      const a = Math.floor(m.x / H) + ',' + Math.floor(m.y / H);
+      g.set(a, (g.get(a) || 0) + 1);
+    }
+    return g;
+  },
+
+  /* Nokta cevresindeki bina yogunlugu (bina / km2) */
+  yogunluk(g, x, y) {
+    const H = this.IZBE_HUCRE;
+    const i = Math.floor(x / H), j = Math.floor(y / H);
+    let n = 0;
+    for (let a = i - 1; a <= i + 1; a++) {
+      for (let b = j - 1; b <= j + 1; b++) n += (g.get(a + ',' + b) || 0);
+    }
+    const km2 = (3 * H) * (3 * H) / 1e6;
+    return n / km2;
   },
 
   /* Noktalari hucrelere at: her ornek nokta icin butun binalari
@@ -380,20 +424,25 @@ const Touge = {
        darlik     : yolun kaci DAR_ESIK icinde bina dibinden geciyor
        Ikisi ayri cunku bir yol yer yer bina dibinden gecip sonra
        acikliga cikabilir; ortalama bunu gizler, darlik gizlemez. */
-    let mesafeToplam = 0, dar = 0;
+    let mesafeToplam = 0, dar = 0, yogToplam = 0;
     for (const p of o) {
       const u = this.binaMesafesi(izgara, p.x, p.y, this.BINA_YARICAP);
       mesafeToplam += u;
       if (u < this.DAR_ESIK) dar++;
+      if (this.izbeG) yogToplam += this.yogunluk(this.izbeG, p.x, p.y);
     }
     const binaMesafe = o.length ? mesafeToplam / o.length : this.BINA_YARICAP;
     const darlik = o.length ? dar / o.length : 0;
+    /* Yol boyunca ortalama bina yogunlugu (bina/km2). Yol sehirden
+       cikip kira giriyorsa ortalama ikisinin arasinda kaliyor —
+       dogrusu bu, yolun yarisi sehirdeyse yari kirsal sayilmali. */
+    const binaYogunluk = o.length ? yogToplam / o.length : 0;
 
     return {
       uzunluk: uzunluk, kusUcusu: kusUcusu, kivrim: kivrim,
       donusPerKm: donusPerKm, rakimAralik: rakimAralik, rakimKazanc: rakimKazanc,
       kavsakPerKm: kavsakPerKm, binaMesafe: binaMesafe, darlik: darlik,
-      manzara: manzara, ornek: o
+      binaYogunluk: binaYogunluk, manzara: manzara, ornek: o
     };
   },
 
@@ -414,7 +463,13 @@ const Touge = {
        ayni puani aliyordu. */
     const kavsakP = kirp(1 - m.kavsakPerKm / 12);
     const binaP = kirp((m.binaMesafe - 10) / 30);
-    const nis = 0.45 * kavsakP + 0.55 * binaP;
+    /* IZBELIK: toplumdan uzaklik. binaP sadece 70 m'ye kadar bakiyor
+       ve 40 m'de doyuyor — koyun kenari ile bozkirin ortasi ayni
+       cikiyordu. izbeP 600 m'lik alandaki bina yogunluguna bakiyor ve
+       doymuyor, yumusak azaliyor. Kullanicinin istegi: "toplumdan ne
+       kadar uzak o kadar puan". */
+    const izbeP = this.IZBE_YARI / (this.IZBE_YARI + m.binaYogunluk);
+    const nis = 0.28 * kavsakP + 0.24 * binaP + 0.48 * izbeP;
 
     /* Halka / cikmaz elemesi: her iki tur icin de gecerli.
        Basladigi yere donen yol surulecek yol degil. */
@@ -435,17 +490,21 @@ const Touge = {
          mahalle arasi 250-330, gercekten kivrimli 500-840. */
       const kivrimP = kirp(m.donusPerKm / 600);
       const rakimP = kirp(m.rakimAralik / 80);
-      const uzunP = kirp(m.uzunluk / 3000);
+      /* Uzunluk agirligi 0.03'ten 0.12'ye cikti ve doyum 3 km'den
+         6 km'ye — kullanicinin istegi "ne kadar uzun o kadar puan".
+         Onceden 900 m'lik bir yol ile 5 km'lik yol arasindaki fark
+         toplam puanda binde birkactu, yani yoktu. */
+      const uzunP = kirp(m.uzunluk / 6000);
       /* RAKIM ARTIK SART DEGIL, BONUS. Kullanicinin verdigi yon:
          "dag gecidi degil, sehrin icinde kivrimli yol da olur".
          Rakim agirligi 0.20'den 0.10'a indi; dusen agirlik
          kivrimliliga ve nis olmaya gitti. */
       const agirlik = rakimVar
-        ? [[kivrimP, 0.46], [nis, 0.24], [trafik, 0.14], [rakimP, 0.10], [m.manzara, 0.03], [uzunP, 0.03]]
-        : [[kivrimP, 0.52], [nis, 0.27], [trafik, 0.15], [m.manzara, 0.03], [uzunP, 0.03]];
+        ? [[kivrimP, 0.38], [nis, 0.32], [uzunP, 0.12], [trafik, 0.10], [rakimP, 0.06], [m.manzara, 0.02]]
+        : [[kivrimP, 0.42], [nis, 0.34], [uzunP, 0.12], [trafik, 0.10], [m.manzara, 0.02]];
       let p = 0;
       for (const [v, w] of agirlik) p += v * w;
-      return { puan: p, kivrimP: kivrimP, rakimP: rakimP, nis: nis,
+      return { puan: p, kivrimP: kivrimP, rakimP: rakimP, nis: nis, izbeP: izbeP,
                trafik: trafik, manzara: m.manzara, uzunP: uzunP };
     }
 
@@ -467,12 +526,13 @@ const Touge = {
     const oranP = kirp(1 - (m.kivrim - 1) * 6);
     const donusP = kirp(1 - m.donusPerKm / 120);
     const duzP = 0.5 * oranP + 0.5 * donusP;
-    const uzunP = kirp(m.uzunluk / 4000);
+    const uzunP = kirp(m.uzunluk / 8000);
     /* Sahil yolu tam buraya dusuyor: duz, uzun, deniz kenarinda.
        Manzara agirligi duzde daha yuksek — duz bir yolu surulmeye
-       deger yapan sey zaten manzarasi. */
-    let p = duzP * 0.40 + nis * 0.21 + trafik * 0.16 + uzunP * 0.11 + m.manzara * 0.12;
-    return { puan: p, duzP: duzP, nis: nis, trafik: trafik,
+       deger yapan sey zaten manzarasi. Uzunluk da duzde daha onemli:
+       basilacak yolun kisasi olmaz. */
+    let p = duzP * 0.32 + nis * 0.28 + uzunP * 0.18 + trafik * 0.12 + m.manzara * 0.10;
+    return { puan: p, duzP: duzP, nis: nis, izbeP: izbeP, trafik: trafik,
              manzara: m.manzara, uzunP: uzunP };
   },
 
@@ -484,7 +544,9 @@ const Touge = {
     const yollar = this.yollariTopla();
     if (!yollar.length) return { hata: 'Once yol verisi insin (haritada biraz gez).' };
 
-    const izgara = this.binaIzgarasi(this.binalariTopla());
+    const binalar = this.binalariTopla();
+    const izgara = this.binaIzgarasi(binalar.kose);
+    this.izbeG = this.izbeIzgarasi(binalar.merkez);
     this.suIzgara = this.binaIzgarasi(this.sulariTopla());
 
     /* KAVSAK SAYIMI YOLLARDAN, GRAFIKTEN DEGIL.

@@ -479,6 +479,40 @@ gercekten kivrimli 500-840.
 Sahil bonusu isini goruyor: Buyukcekmece'de `Yuzuncu Yil Bulvari` (su
 orani 0.80) duz listesinde birinci sirada.
 
+### Izbelik — toplumdan uzaklik
+
+Kullanicinin istegi: *"kirsal olunca puan artsin, toplumdan ne kadar uzak o
+kadar puan artsin, ne kadar uzun o kadar puan artsin"*.
+
+En yakin binaya mesafe bu isi goremiyordu: arama 70 m'de kesiliyor ve puan
+40 m'de doyuyor, yani 70 m otede tek kulube olan yol ile 5 km icinde hicbir
+sey olmayan yol ayni cikiyordu.
+
+Ayri bir **yogunluk izgarasi** eklendi: 200 m'lik hucrelere bina sayilari
+onceden yaziliyor, bir yol noktasi icin 3x3 hucre toplaniyor (0.36 km2).
+Genis alana tek bakista bakiliyor, her nokta icin yuzlerce bina taranmadan.
+
+    izbelik = 150 / (150 + bina_km2)
+
+Yumusak azalma, sert kesme degil — sert kesmede butun sehir ici 0 olup
+birbirinden ayirt edilemez hale geliyordu. 0 bina/km2 -> 1.00, 150 -> 0.50,
+450 -> 0.25.
+
+Uzunluk agirligi da 0.03'ten 0.12'ye cikti (duzde 0.18), doyum 3 km'den
+6 km'ye (duzde 8 km). Onceden 900 m'lik yol ile 5 km'lik yol arasindaki fark
+toplam puanda binde birkacti, yani yoktu.
+
+Olculdu — ayni bolgeler, degisiklikten once ve sonra en yuksek puan:
+
+| bolge | once | sonra | izbelik |
+|---|---|---|---|
+| Beylikduzu (sehir ici) | 0.75 | **0.68** | 0.48-0.95 |
+| Belgrad Ormani | 0.80 | **0.83** | 1.00 |
+| Sile-Agva | 0.78 | **0.86** | 1.00 |
+
+Arada 0.05'lik fark vardi, simdi 0.18. Sile'de 5.56 km'lik yol ikinci sirada
+(0.85) — uzunluk artik gercekten sayiliyor.
+
 ### Kirsalda da calisiyor
 
 Dort bolgede olculdu (virajli listesinin ortalama donusu):

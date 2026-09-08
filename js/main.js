@@ -852,6 +852,8 @@ const Uyg = {
                 (y.serit != null ? ' · ' + y.serit + ' serit' : '') + '\n' +
                 'puan ' + y.puan.toFixed(2) + ' · nis ' + y.nis.toFixed(2) +
                 ' · trafik ' + y.trafik.toFixed(2) + '\n' +
+                'izbelik ' + y.izbeP.toFixed(2) +
+                ' (' + Math.round(y.olcum.binaYogunluk) + ' bina/km²)\n' +
                 Math.round(y.olcum.kavsakPerKm) + ' kavsak/km · ' +
                 'bina ort. ' + Math.round(y.olcum.binaMesafe) + ' m · ' +
                 'bina dibi %' + Math.round(y.olcum.darlik * 100) +
