@@ -1442,10 +1442,14 @@ const Cizer = {
         }
         c.closePath();
       }
-      c.fillStyle = vurgulu ? o.renk.secili : o.renk.dolgu;
+      /* Uc kademe: normal, farenin altinda, secili. Ikisini ayni
+         gostermek "hangisine tikliyorum" sorusunu cevapsiz
+         birakiyordu. */
+      c.fillStyle = (o === secili) ? o.renk.secili
+                  : (o === uzerinde) ? o.renk.uzerine : o.renk.dolgu;
       c.fill('evenodd');
       c.strokeStyle = o.renk.cizgi;
-      c.lineWidth = vurgulu ? 3 : 1.6;
+      c.lineWidth = (o === secili) ? 4 : (o === uzerinde) ? 3 : 2;
       c.stroke();
     }
 

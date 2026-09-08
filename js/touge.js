@@ -703,7 +703,12 @@ const Touge = {
      ------------------------------------------------------------ */
   TARAMA_PARTI: [2, 2],
 
-  async bolgeVerisi(lat, lon, km, ilerleme) {
+  /* blokGecerli(kutu) verilirse o kutuyu kapsamayan bloklar hic
+     indirilmiyor. Ilce taramasinda kritik: ilcenin KUTUSU ilceden
+     cok daha buyuk olabiliyor (Buyukcekmece kiyi boyunca uzuyor,
+     kutusunun buyuk kismi deniz ve komsu ilce). Olculdu: 42 blok
+     gerekiyordu, ilceye gercekten degen blok cok daha az. */
+  async bolgeVerisi(lat, lon, km, ilerleme, blokGecerli) {
     const seviye = 'mahalle';
     const z = Overpass.DETAY[seviye].karoZoom;
     const p = this.TARAMA_PARTI;
@@ -727,7 +732,31 @@ const Touge = {
         g.push({ z: z, x: x, y: y });
       }
     }
-    const bloklar = Array.from(gruplar.values());
+    let bloklar = Array.from(gruplar.values());
+
+    /* Bolgeye gercekten degmeyen bloklari at. Kutu her zaman
+       dikdortgen, aranan alan degil. */
+    if (blokGecerli) {
+      const oncesi = bloklar.length;
+      bloklar = bloklar.filter((gr) => {
+        let mg = Infinity, mb = Infinity, mk = -Infinity, md = -Infinity;
+        for (const t of gr) {
+          const kk = Karolar.karoKutusu(t.z, t.x, t.y);
+          if (kk[0] < mg) mg = kk[0];
+          if (kk[1] < mb) mb = kk[1];
+          if (kk[2] > mk) mk = kk[2];
+          if (kk[3] > md) md = kk[3];
+        }
+        return blokGecerli({ g: mg, b: mb, k: mk, d: md });
+      });
+      this.sonElenenBlok = oncesi - bloklar.length;
+    } else {
+      this.sonElenenBlok = 0;
+    }
+    if (!bloklar.length) {
+      return { hata: 'Bu alanda inecek blok kalmadi.' };
+    }
+
     if (bloklar.length > this.ENCOK_BLOK) {
       return { hata: 'Bu yaricap icin ' + bloklar.length + ' blok inmesi gerekiyor ' +
                      '(sinir ' + this.ENCOK_BLOK + '). Yaricapi kucult.' };

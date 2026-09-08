@@ -27,6 +27,7 @@ const Sinir = {
 
   ilceler: [],          // { ad, halkalar: [[{lat,lon}]], kutu, renk, merkez }
   secili: null,
+  uzerinde: null,       // farenin uzerinde oldugu ilce
   aktif: false,
   yukleniyor: false,
 
@@ -36,9 +37,15 @@ const Sinir = {
   renkUret(i) {
     const ton = (i * 137.5) % 360;
     return {
-      dolgu: 'hsla(' + ton.toFixed(0) + ', 65%, 55%, 0.16)',
-      cizgi: 'hsla(' + ton.toFixed(0) + ', 75%, 62%, 0.85)',
-      secili: 'hsla(' + ton.toFixed(0) + ', 80%, 60%, 0.34)'
+      /* Dolgu %16'ydi ve 21 ilce yan yanayken hangisinin nerede
+         bittigi secilmiyordu — kullanici Buyukcekmece sanip
+         Esenyurt'a tikliyordu. Dolgu koyulastirildi, kenar
+         kalinlastirildi, ustune gelince ve secilince ayri ayri
+         belirginlesiyor. */
+      dolgu:   'hsla(' + ton.toFixed(0) + ', 70%, 55%, 0.30)',
+      uzerine: 'hsla(' + ton.toFixed(0) + ', 85%, 62%, 0.52)',
+      secili:  'hsla(' + ton.toFixed(0) + ', 95%, 65%, 0.68)',
+      cizgi:   'hsla(' + ton.toFixed(0) + ', 80%, 70%, 0.95)'
     };
   },
 
@@ -120,7 +127,38 @@ const Sinir = {
   /* ------------------------------------------------------------
      Ekrandaki bolgenin ilcelerini indir
      ------------------------------------------------------------ */
-  async indir(kutu) {
+  /* ------------------------------------------------------------
+     KUTUYU IZGARAYA OTURT
+     ------------------------------------------------------------
+     Onbellek sorgu METNININ ozetine gore calisiyor. Kutu ekrandaki
+     gorunume gore hesaplanirsa her acilista birkac ondalik basamak
+     kayiyor, sorgu metni degisiyor ve onbellek HIC tutmuyor.
+
+     Olculdu (8 Eylul 2026, Istanbul Anadolu):
+       ayni kutu ikinci kez     ->   80 ms  (onbellekten)
+       kutu ~1 km kaymis        -> 7879 ms  (yeniden iniyor)
+       soguk                    -> 8084 ms
+
+     Kutu 0.1 derecelik (~11 km) izgaraya disari dogru oturtuluyor:
+     kullanici biraz gezinse de ayni sorgu cikiyor ve ikinci acilis
+     8 saniye yerine 0.08 saniye suruyor. Bedeli biraz daha genis
+     alan inmesi — sorgu suresi alanla dogru orantili olmadigi icin
+     bu neredeyse bedava.
+     ------------------------------------------------------------ */
+  IZGARA: 0.1,
+
+  kutuyuOturt(kutu) {
+    const a = this.IZGARA;
+    const asagi = (v) => Math.floor(v / a) * a;
+    const yukari = (v) => Math.ceil(v / a) * a;
+    return [
+      +asagi(kutu[0]).toFixed(4), +asagi(kutu[1]).toFixed(4),
+      +yukari(kutu[2]).toFixed(4), +yukari(kutu[3]).toFixed(4)
+    ];
+  },
+
+  async indir(hamKutu) {
+    const kutu = this.kutuyuOturt(hamKutu);
     const b = kutu.join(',');
     /* out geom: uye yollarin noktalarini da getirir. Bunsuz sadece
        uye id'leri gelir ve ikinci bir sorgu gerekirdi. */
@@ -162,11 +200,42 @@ const Sinir = {
     return liste;
   },
 
+  /* ------------------------------------------------------------
+     Bir dikdortgen ilceye degiyor mu?
+     ------------------------------------------------------------
+     Ilcenin KUTUSU ilcenin kendisinden cok daha buyuk olabiliyor:
+     Buyukcekmece kiyi boyunca uzuyor, kutusunun buyuk kismi deniz
+     ve komsu ilce. O kutuyu bloklara bolup hepsini indirmek hem
+     yavas hem gereksiz (olculdu: 42 blok gerekiyordu).
+
+     Kesisim testi uc soruyla: (a) kutunun kosesi ya da ortasi ilce
+     icinde mi, (b) ilcenin herhangi bir sinir noktasi kutu icinde
+     mi. Ucuncu durum — kutu tamamen ilcenin ortasinda ve hicbir
+     sinir noktasi icinde degil — (a) ile zaten yakalaniyor.
+     ------------------------------------------------------------ */
+  kutuyaDeger(ilce, kt) {
+    const i = ilce.kutu;
+    if (kt.k < i.g || kt.g > i.k || kt.d < i.b || kt.b > i.d) return false;
+
+    const noktalar = [
+      [kt.g, kt.b], [kt.g, kt.d], [kt.k, kt.b], [kt.k, kt.d],
+      [(kt.g + kt.k) / 2, (kt.b + kt.d) / 2]
+    ];
+    for (const [la, lo] of noktalar) if (this.icinde(ilce, la, lo)) return true;
+
+    for (const h of ilce.halkalar) {
+      for (const p of h) {
+        if (p.lat >= kt.g && p.lat <= kt.k && p.lon >= kt.b && p.lon <= kt.d) return true;
+      }
+    }
+    return false;
+  },
+
   /* Tiklanan cografi noktanin hangi ilceye dustugu */
   noktadakiIlce(lat, lon) {
     for (const o of this.ilceler) if (this.icinde(o, lat, lon)) return o;
     return null;
   },
 
-  temizle() { this.ilceler = []; this.secili = null; this.aktif = false; }
+  temizle() { this.ilceler = []; this.secili = null; this.uzerinde = null; this.aktif = false; }
 };

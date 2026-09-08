@@ -976,32 +976,43 @@ const Uyg = {
     Sinir.yukleniyor = true;
     this.durum('Uzaklasiliyor...');
 
-    /* Once UZAKLAS, sonra indir. Sinir sorgusu ekranda gorunen
-       kutuya gore yapiliyor; yakinken tek bir ilcenin ortasinda
-       kaliniyor ve "ilce bulunamadi" cikiyordu. Kullanicinin elle
-       uzaklasmasini beklemek yerine kendimiz uzaklasiyoruz.
-       Merkez YERINDE kaliyor, sadece olcek degisiyor — nerede
-       oldugunu kaybetmesin. */
     this._ilceKameraYedek = this.kameraMerkezi();
+
+    /* ------------------------------------------------------------
+       KUTU HEDEF OLCEGE GORE, ZOOM'DAN ONCE HESAPLANIYOR
+       ------------------------------------------------------------
+       Onceden once zoom bitiriliyor, sonra kutu ekrandan okunup
+       indirme baslatiliyordu — olculdu, zoom 805 ms suruyor ve o
+       sure boyunca hicbir sey inmiyordu.
+
+       Gorunen alan olcekle ters orantili oldugu icin hedef
+       olcekteki kutu SIMDIDEN hesaplanabiliyor. Boylece indirme
+       zoom animasyonuyla AYNI ANDA basliyor.
+       ------------------------------------------------------------ */
+    const gb = Cizer.gorunenBolge(0);
+    const cx = (gb.minx + gb.maxx) / 2, cy = (gb.miny + gb.maxy) / 2;
+    const buyume = Math.max(1, Kamera.olcek / this.ILCE_OLCEK);
+    /* %25 pay: yarisi ekran disinda kalan ilce hic gorunmezse
+       tiklanamaz. */
+    const yariX = (gb.maxx - gb.minx) / 2 * buyume * 1.25;
+    const yariY = (gb.maxy - gb.miny) / 2 * buyume * 1.25;
+    const g1 = Proj.cografiye(cx - yariX, cy - yariY);
+    const g2 = Proj.cografiye(cx + yariX, cy + yariY);
+    const kutu = [Math.min(g1.lat, g2.lat), Math.min(g1.lon, g2.lon),
+                  Math.max(g1.lat, g2.lat), Math.max(g1.lon, g2.lon)];
+
+    this.durum('Ilce sinirlari iniyor...');
+    /* Indirme ve zoom ES ZAMANLI: ikisi de baslatilip birlikte
+       bekleniyor. Sinirlar zoom'dan once gelirse hemen ciziliyor. */
+    const inis = Sinir.indir(kutu);
     if (Kamera.olcek > this.ILCE_OLCEK) {
       this.zoomOdak = null;
       this.hedefOlcek = this.ILCE_OLCEK;
-      await this.olcekOturana(4000);
-      this.karolariGuncelle(true);
+      this.olcekOturana(4000).then(() => this.karolariGuncelle(true));
     }
 
-    this.durum('Ilce sinirlari iniyor...');
     try {
-      /* Ekranda gorunen bolgenin ilceleri. Sinirlar buyuk oldugu
-         icin kutu biraz genisletiliyor: yarisi ekran disinda kalan
-         bir ilce hic gorunmezse tiklanamaz. */
-      const gb = Cizer.gorunenBolge(0);
-      const pay = Math.max(gb.maxx - gb.minx, gb.maxy - gb.miny) * 0.25;
-      const g1 = Proj.cografiye(gb.minx - pay, gb.miny - pay);
-      const g2 = Proj.cografiye(gb.maxx + pay, gb.maxy + pay);
-      const kutu = [Math.min(g1.lat, g2.lat), Math.min(g1.lon, g2.lon),
-                    Math.max(g1.lat, g2.lat), Math.max(g1.lon, g2.lon)];
-      const liste = await Sinir.indir(kutu);
+      const liste = await inis;
       if (!liste.length) {
         this.durum('Bu gorunumde ilce siniri bulunamadi — biraz uzaklas.', 'uyari');
         return;
@@ -1063,6 +1074,13 @@ const Uyg = {
      yaricap kutusu burada gecersiz. */
   async ilcedeAra(ilce) {
     Sinir.secili = ilce;
+    /* Eski sonuclari HEMEN sil. Yoksa arama basarisiz olunca ya da
+       surerken bir onceki ilcenin sonuclari ekranda kaliyor ve
+       kullanici yanlis ilce arandi saniyor — "Buyukcekmece secince
+       Esenyurt gosteriyo" sikayetinin sebebi buydu. */
+    Touge.temizle();
+    Sinir.secili = ilce;
+    this.tougeYaz(null);
     Cizer.kirlet();
     const tur = document.getElementById('tougeTur').value;
     const mahalleDahil = document.getElementById('tougeMahalle').checked;
@@ -1098,7 +1116,9 @@ const Uyg = {
         (bitti, toplam, kotu) => {
           this.durum(ilce.ad + ' · blok ' + bitti + '/' + toplam +
                      (kotu ? ' (' + kotu + ' inmedi)' : ''));
-        });
+        },
+        /* Ilceye degmeyen bloklar hic inmesin */
+        (kt) => Sinir.kutuyaDeger(ilce, kt));
       if (v.hata) {
         this.durum(ilce.ad + ': ' + v.hata + ' Ilce cok buyuk — yer kutusuna ' +
                    'bir mahalle yazip yaricapla ara.', 'uyari');
@@ -1118,7 +1138,8 @@ const Uyg = {
       if (c.hata) { this.durum(c.hata, 'uyari'); this.tougeYaz(null); return; }
       this.tougeYaz(c);
       Cizer.kirlet();
-      this.durum(ilce.ad + ' · ' + v.blok + ' blok · ' +
+      this.durum(ilce.ad + ' · ' + v.blok + ' blok' +
+                 (Touge.sonElenenBlok ? ' (' + Touge.sonElenenBlok + ' blok ilce disinda, inmedi)' : '') + ' · ' +
                  v.kaynak.yollar.length + '/' + oncesi + ' yol ilce icinde · ' +
                  c.toplam + ' aday' + this.tougeEleme(c) + c.ms.toFixed(0) + ' ms' +
                  (v.basarisiz ? '  ·  ' + v.basarisiz + ' blok inmedi' : ''),
@@ -1561,6 +1582,27 @@ const Uyg = {
       const r = t.getBoundingClientRect();
       const w = Kamera.dunyayaArazi(e.clientX - r.left, e.clientY - r.top);
       this.imlecYaz(w);
+
+      /* Ilce modunda farenin altindaki ilceyi vurgula ve adini yaz.
+         Tiklamadan ONCE hangisini sectigini gormek sart: 21 ilce
+         yan yanayken renkler tek basina yetmiyor, kullanici
+         Buyukcekmece sanip Esenyurt'a tikliyordu.
+         Nokta-poligon testi 24 bin nokta uzerinde donuyor, her
+         fare hareketinde degil ~60 ms'de bir yapiliyor. */
+      if (Sinir.aktif && !this.surukluyor) {
+        const simdi = performance.now();
+        if (simdi - (this._sinirYoklama || 0) > 60) {
+          this._sinirYoklama = simdi;
+          const cg = Proj.cografiye(w.x, w.y);
+          const o = Sinir.noktadakiIlce(cg.lat, cg.lon);
+          if (o !== Sinir.uzerinde) {
+            Sinir.uzerinde = o;
+            Cizer.kirlet();
+            if (o) this.durum(o.ad + ' — tikla, burada arasin.');
+          }
+        }
+      }
+
       if (!this.surukluyor) return;
       const dx = e.clientX - this.sonFare.x, dy = e.clientY - this.sonFare.y;
       if (e.shiftKey) {
@@ -1623,6 +1665,11 @@ const Uyg = {
       const cg = Proj.cografiye(w.x, w.y);
       const o = Sinir.noktadakiIlce(cg.lat, cg.lon);
       if (!o) { this.durum('Orada ilce yok — sinirlarin icine tikla.', 'uyari'); return; }
+      /* Once vurgula ve HEMEN ciz: arama saniyeler suruyor, o sure
+         boyunca kullanici hangisini sectigini gormeli. */
+      Sinir.secili = o;
+      Sinir.uzerinde = null;
+      Cizer.kirlet();
       this.ilcedeAra(o);
       return;
     }
@@ -1743,7 +1790,7 @@ const Uyg = {
     }
 
     Cizer.ciz((c) => {
-      if (Sinir.aktif) Cizer.ilcelerCiz(c, Sinir.ilceler, Sinir.secili, null);
+      if (Sinir.aktif) Cizer.ilcelerCiz(c, Sinir.ilceler, Sinir.secili, Sinir.uzerinde);
 
       /* Touge vurgusu: rota ve duraklar onun ustunde kalsin.
          Secili olan daha parlak ve kalin — listede tiklanan hangisi
