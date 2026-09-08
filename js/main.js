@@ -1089,7 +1089,11 @@ const Uyg = {
          basildiginda o calismasin. */
       g.onclick = (e) => e.stopPropagation();
 
-      s.appendChild(n); s.appendChild(a); s.appendChild(g); s.appendChild(p);
+      /* Yolun BASLANGIC koordinati: kullanici oraya gidip baslayacak. */
+      const b0 = y.olcum.ornek[0];
+      s.appendChild(n); s.appendChild(a);
+      s.appendChild(this.kopyaDugmesi(b0.lat, b0.lon, 'Yolun baslangic koordinatini kopyala'));
+      s.appendChild(g); s.appendChild(p);
       s.onclick = () => {
         Touge.secili = y;
         const o = y.nokta[Math.floor(y.nokta.length / 2)];
@@ -1108,6 +1112,133 @@ const Uyg = {
     }
   },
 
+  /* ------------------------------------------------------------
+     PANOYA KOPYALA
+     navigator.clipboard sadece guvenli baglamda calisiyor (https
+     ya da localhost). Dosyayi cift tiklayip actiysan file://
+     guvenli sayilmiyor; o yuzden eski yontem yedekte duruyor.
+     ------------------------------------------------------------ */
+  async panoyaKopyala(metin, mesaj) {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(metin);
+      } else {
+        const a = document.createElement('textarea');
+        a.value = metin;
+        a.style.position = 'fixed';
+        a.style.opacity = '0';
+        document.body.appendChild(a);
+        a.select();
+        document.execCommand('copy');
+        document.body.removeChild(a);
+      }
+      this.durum((mesaj || 'Kopyalandi') + ': ' +
+                 metin.split('\n')[0].slice(0, 60) +
+                 (metin.length > 60 ? '...' : ''), 'iyi');
+      return true;
+    } catch (e) {
+      this.durum('Kopyalanamadi: ' + e.message + ' — elle sec ve kopyala.', 'hata');
+      return false;
+    }
+  },
+
+  /* Satira "koordinati kopyala" dugmesi */
+  kopyaDugmesi(lat, lon, baslik) {
+    const b = document.createElement('button');
+    b.className = 'kopyaBtn';
+    b.textContent = '◎';
+    b.title = baslik || 'Koordinati panoya kopyala';
+    b.onclick = (e) => {
+      e.stopPropagation();
+      this.panoyaKopyala(lat.toFixed(6) + ', ' + lon.toFixed(6), 'Koordinat kopyalandi');
+    };
+    return b;
+  },
+
+  /* ============================================================
+     ISTEK VERISI (payload)
+     ------------------------------------------------------------
+     Duraklari ve rotayi dis bir servise gonderilebilecek bicimde
+     cikariyor.
+
+     ANAHTARLAR INGILIZCE. Projenin geri kalani Turkce ama bu bir
+     DIS SOZLESME: baska bir sistemin okuyacagi veri. Turkce
+     anahtar gonderip karsi tarafin "sube" alanini tanimasini
+     beklemek gercekci degil. Degistirmek isteyen tek yerden
+     degistirsin diye hepsi bu fonksiyonda.
+
+     Koordinatlar yola OTURTULMUS haliyle veriliyor, kullanicinin
+     yazdigi ham koordinat degil: rota bu noktalardan hesaplandi,
+     dis servisin de ayni noktayi gormesi lazim.
+     ============================================================ */
+  istekVerisi() {
+    const nokta = (d, ek) => {
+      const o = { lat: +d.lat.toFixed(6), lon: +d.lon.toFixed(6) };
+      if (d.ad) o.label = d.ad;
+      /* OSM dugum id'si: karsi taraf ayni yol agini kullaniyorsa
+         koordinat yuvarlamasindan bagimsiz esleme yapabiliyor. */
+      if (d.dugumId != null) o.osm_node = d.dugumId;
+      return Object.assign(o, ek || {});
+    };
+
+    const v = {
+      version: '1.0',
+      generated_at: new Date().toISOString(),
+      source: 'kurye-harita',
+      crs: 'EPSG:4326',
+      depot: this.sube ? nokta(this.sube) : null,
+      stops: [],
+      options: {
+        capacity: Math.max(1, parseInt(document.getElementById('kapasite').value, 10) || 3),
+        cost: document.getElementById('olcut').value === 'sure' ? 'duration' : 'distance',
+        respect_oneway: document.getElementById('tekYon').checked,
+        vehicle_speed_mps: this.kurye.hiz
+      }
+    };
+
+    /* Duraklar TESLIMAT sirasinda; rota cizilmemisse ekleme
+       sirasinda. sequence_source hangisi oldugunu soyluyor —
+       karsi taraf sirayi kendi mi kuracak bilsin. */
+    const rotaVar = this.teslimatSirasi.length === this.musteriler.length &&
+                    this.musteriler.length > 0;
+    const sira = rotaVar ? this.teslimatSirasi : this.musteriler.map((m, i) => i);
+    sira.forEach((idx, yer) => {
+      const m = this.musteriler[idx];
+      if (!m) return;
+      v.stops.push(nokta(m, { sequence: yer + 1, added_index: idx }));
+    });
+    v.options.sequence_source = rotaVar ? 'optimized' : 'insertion_order';
+
+    if (rotaVar && this.rotalar.length) {
+      /* Sefer bolunmesi: hangi duraklar ayni turda. bacakBilgi'den
+         cikariliyor, cunku kapasite dolunca subeye donuluyor. */
+      const seferler = [];
+      let su = [];
+      this.bacakBilgi.forEach((b, i) => {
+        if (!b) return;
+        if (b.tip === 'musteri') su.push(i);
+        else { if (su.length) seferler.push(su); su = []; }
+      });
+      if (su.length) seferler.push(su);
+      v.route = {
+        leg_count: this.rotalar.length,
+        trip_count: seferler.length,
+        polyline_points: this.rotalar.reduce((s, r) => s + r.length, 0)
+      };
+    }
+    return v;
+  },
+
+  istekVerisiYaz() {
+    const kap = document.getElementById('payloadKutu');
+    if (!kap) return;
+    if (!this.sube && !this.musteriler.length) {
+      kap.textContent = '// once sube ve musteri koy';
+      return;
+    }
+    kap.textContent = JSON.stringify(this.istekVerisi(), null, 2);
+  },
+
   rotalariUnut() {
     this.rotalar = []; this.teslimatSirasi = []; this.bacakBilgi = [];
     this.kurye.aktif = false; this.kurye.varis = 0;
@@ -1119,6 +1250,7 @@ const Uyg = {
   /* Panel listesi. Rota cizilmisse TESLIMAT sirasina gore diziliyor —
      numaralar haritadaki isaretcilerle birebir ayni. */
   duraklariYaz() {
+    this.istekVerisiYaz();
     const kap = document.getElementById('duraklarListe');
     if (!kap) return;
     kap.innerHTML = '';
@@ -1128,7 +1260,7 @@ const Uyg = {
       return;
     }
 
-    const satir = (no, sinif, ad, silFn) => {
+    const satir = (no, sinif, ad, silFn, d) => {
       const s = document.createElement('div');
       s.className = 'durakSatir';
       const n = document.createElement('b');
@@ -1139,6 +1271,7 @@ const Uyg = {
       a.textContent = ad;
       a.title = ad;
       s.appendChild(n); s.appendChild(a);
+      if (d) s.appendChild(this.kopyaDugmesi(d.lat, d.lon));
       if (silFn) {
         const b = document.createElement('button');
         b.className = 'sil'; b.textContent = '✕'; b.title = 'sil';
@@ -1154,7 +1287,7 @@ const Uyg = {
       satir('S', 'sube', yaz(this.sube), () => {
         this.sube = null; this.rotalariUnut(); this.duraklariYaz();
         this.durum('Sube silindi.');
-      });
+      }, this.sube);
     }
 
     /* Rota varsa teslimat sirasina gore, yoksa ekleme sirasina gore. */
@@ -1172,7 +1305,7 @@ const Uyg = {
         this.rotalariUnut();      // indeksler kaydi, eski sira gecersiz
         this.duraklariYaz();
         this.durum(this.musteriler.length + ' musteri kaldi. Rotayi yeniden ciz.');
-      });
+      }, m);
     });
   },
 
@@ -1203,6 +1336,15 @@ const Uyg = {
     document.getElementById('tougeBtn').onclick = () => this.tougeBul();
     document.getElementById('tougeYerBtn').onclick = () => this.tougeYerdeAra();
     document.getElementById('ilceBtn').onclick = () => this.ilceModuAc();
+    document.getElementById('payloadTazeBtn').onclick = () => {
+      this.istekVerisiYaz(); this.durum('Istek verisi tazelendi.');
+    };
+    document.getElementById('payloadKopyaBtn').onclick = () => {
+      if (!this.sube && !this.musteriler.length) {
+        this.durum('Once sube ve musteri koy.', 'uyari'); return;
+      }
+      this.panoyaKopyala(JSON.stringify(this.istekVerisi(), null, 2), 'Payload kopyalandi');
+    };
     document.getElementById('tougeYer').onkeydown = (e) => {
       if (e.key === 'Enter') { e.preventDefault(); this.tougeYerdeAra(); }
     };

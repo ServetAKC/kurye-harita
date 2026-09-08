@@ -645,3 +645,72 @@ kaldi — yani liste bosalmiyor.
 Test: `node test_eleme.js` — kutucuk kapali ve acikken ayri ayri tarayip
 eleme sayilarini dokuyor, ve eleme sonrasi listede mahalle sokagi kalmadigini
 dogruluyor.
+
+---
+
+## Istek verisi (payload) ve koordinat kopyalama
+
+### Payload
+
+Rota bolumunde "Istek verisi (payload)" acilir kutusu: duraklari ve rotayi
+dis bir servise gonderilebilecek JSON olarak cikariyor. "JSON'u kopyala" ile
+panoya aliniyor.
+
+**Anahtarlar Ingilizce.** Projenin geri kalani Turkce ama bu bir DIS
+SOZLESME — baska bir sistemin okuyacagi veri. Turkce anahtar gonderip karsi
+tarafin "sube" alanini tanimasini beklemek gercekci degil. Degistirmek
+isteyen `Uyg.istekVerisi()` icinden tek yerden degistirir.
+
+```json
+{
+  "version": "1.0",
+  "generated_at": "2026-09-08T11:44:43.115Z",
+  "source": "kurye-harita",
+  "crs": "EPSG:4326",
+  "depot": { "lat": 41.001133, "lon": 28.641739, "osm_node": 10555296228 },
+  "stops": [
+    { "lat": 41.008712, "lon": 28.649365, "osm_node": 1832829312,
+      "sequence": 1, "added_index": 2 }
+  ],
+  "options": {
+    "capacity": 3, "cost": "distance", "respect_oneway": true,
+    "vehicle_speed_mps": 35, "sequence_source": "optimized"
+  },
+  "route": { "leg_count": 6, "trip_count": 2, "polyline_points": 353 }
+}
+```
+
+Uc karar:
+
+- **Koordinatlar yola OTURTULMUS haliyle** veriliyor, kullanicinin yazdigi
+  ham koordinat degil. Rota bu noktalardan hesaplandi; dis servisin de ayni
+  noktayi gormesi lazim.
+- **`sequence_source`** sirali listenin nereden geldigini soyluyor:
+  `optimized` (rota cizildi, sira bizim algoritmadan) ya da
+  `insertion_order` (rota yok, sira ekleme sirasi). Karsi taraf sirayi kendi
+  mi kuracak bilsin diye.
+- **`osm_node`** tasiniyor: karsi taraf ayni yol agini kullaniyorsa
+  koordinat yuvarlamasindan bagimsiz esleme yapabilir.
+
+### Koordinat kopyalama
+
+Durak listesinde her satirda, ✕ dugmesinin yaninda **◎** var: o duragin
+koordinatini `41.008712, 28.649365` bicimiyle panoya aliyor. Touge
+sonuclarinda da ayni dugme var, orada **yolun baslangic** koordinatini
+veriyor — gidip oradan baslayacaksin.
+
+`navigator.clipboard` sadece guvenli baglamda (https ya da localhost)
+calisiyor; dosyayi cift tiklayip actiysan `file://` guvenli sayilmiyor, o
+yuzden eski `execCommand('copy')` yontemi yedekte duruyor.
+
+### Olculdu
+
+`node test_payload.js` — bos durum uyarisi, rota oncesi/sonrasi
+`sequence_source`, `sequence` degerlerinin 1..N ve tekrarsiz olmasi,
+payload sirasinin `Uyg.teslimatSirasi` ile birebir ayni olmasi (olculdu:
+`[2,1,3,0]` = `[2,1,3,0]`), koordinatlarin duraklarla ayni olmasi ve iki
+kopyala dugmesinin gercekten panoya yazmasi.
+
+Not: headless tarayicida `clipboard.readText` "belge odakta degil" diyor;
+test `Emulation.setFocusEmulationEnabled` ile bunu asiyor. Uygulama hatasi
+degil, test ortami kisiti.

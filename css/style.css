@@ -219,3 +219,16 @@ button[data-mod].aktif {
 #ilceBtn.aktif {
   border-color: var(--vurgu); color: var(--vurgu); background: #10222c;
 }
+
+/* --- Koordinat kopyalama ve payload --- */
+.kopyaBtn {
+  flex: 0 0 auto; padding: 0 5px; font-size: 12px; line-height: 1.6;
+  background: none; border: 1px solid #2b3a4d; color: var(--soluk);
+}
+.kopyaBtn:hover { border-color: var(--vurgu); color: var(--vurgu); background: #10222c; }
+.kod {
+  margin: 6px 0 0; padding: 7px 8px; max-height: 230px; overflow: auto;
+  background: #0b1219; border: 1px solid #1e2a38; border-radius: 4px;
+  font-family: ui-monospace, Consolas, monospace; font-size: 10.5px;
+  line-height: 1.45; color: #9fb6cc; white-space: pre;
+}
