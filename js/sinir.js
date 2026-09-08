@@ -231,6 +231,64 @@ const Sinir = {
     return false;
   },
 
+  /* ------------------------------------------------------------
+     CIZIM ICIN HAZIRLIK — kare basina 33 ms'ten kurtulmak
+     ------------------------------------------------------------
+     Olculdu (8 Eylul 2026, 26 ilce / 26732 sinir noktasi):
+     ilcelerCiz kare basina 33.2 ms yiyordu ve her karede
+     Arazi.latLonYukseklik'i 26758 kez cagiriyordu — nokta basina
+     bir kez. 60 fps butcesi 16.7 ms, yani tek basina butceyi
+     ikiye katliyordu.
+
+     Iki sebep vardi:
+       1. Seyreltme ornekten SONRA yapiliyordu: pahali yukseklik
+          ornegi alinip sonra "bu nokta zaten yakin" diye atiliyordu.
+       2. Yukseklik her karede yeniden orneleniyordu, oysa arazi
+          verisi kare kare degismiyor.
+
+     Cozum: halkalar bir kez seyreltilip yukseklikleri saklaniyor.
+     Karede sadece yansitma kaliyor. Arazi verisi degisince
+     (Arazi.surum artinca) yukseklikler bir kez tazeleniyor.
+
+     Seyreltme COGRAFI: ardisik noktalar 35 m'den yakinsa atiliyor.
+     Ilce sinirlari 10-30 km genisliginde, 35 m ekranda bir pikselin
+     altinda kaliyor.
+     ------------------------------------------------------------ */
+  SEYRELT_METRE: 35,
+
+  cizimeHazirla(ilce) {
+    const s = this.SEYRELT_METRE;
+    /* Enlem derecesi ~111 km; boylam cos(enlem) ile kisaliyor. */
+    const dLat = s / 111132;
+    const dLon = s / (111320 * Math.cos(ilce.merkez.lat * Math.PI / 180) || 1);
+
+    ilce.cizim = ilce.halkalar.map((h) => {
+      const c = [];
+      let ox = null, oy = null;
+      for (let i = 0; i < h.length; i++) {
+        const p = h[i];
+        /* Son nokta HER ZAMAN kaliyor, yoksa halka kapanmaz. */
+        if (i > 0 && i < h.length - 1 &&
+            Math.abs(p.lat - oy) < dLat && Math.abs(p.lon - ox) < dLon) continue;
+        c.push({ lat: p.lat, lon: p.lon, z: 0 });
+        ox = p.lon; oy = p.lat;
+      }
+      return c;
+    });
+    ilce.araziSurum = -1;
+    return ilce.cizim;
+  },
+
+  /* Yukseklikleri tazele — sadece arazi verisi degisince. */
+  yukseklikTazele(ilce) {
+    if (!ilce.cizim) this.cizimeHazirla(ilce);
+    if (ilce.araziSurum === Arazi.surum) return;
+    ilce.araziSurum = Arazi.surum;
+    for (const h of ilce.cizim) {
+      for (const p of h) p.z = Arazi.latLonYukseklik(p.lat, p.lon);
+    }
+  },
+
   /* Tiklanan cografi noktanin hangi ilceye dustugu */
   noktadakiIlce(lat, lon) {
     for (const o of this.ilceler) if (this.icinde(o, lat, lon)) return o;

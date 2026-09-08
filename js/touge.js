@@ -780,13 +780,33 @@ const Touge = {
     const suGorulen = new Set();
     let basarisiz = 0, bitti = 0;
 
-    /* Sirayla degil ESZAMANLI, ama Karolar'in slot sayisi kadar:
-       Overpass'i dovmemek icin. Sirali indirmede 9 blok 40 sn
-       suruyordu, 5'li kumede 12 sn. */
-    const kume = Karolar.ESZAMANLI || 5;
-    for (let i = 0; i < bloklar.length; i += kume) {
-      const parca = bloklar.slice(i, i + kume);
-      await Promise.all(parca.map(async (g) => {
+    /* ------------------------------------------------------------
+       ISCI HAVUZU — kume degil
+       ------------------------------------------------------------
+       Onceden bloklar 5'li kumelere bolunup her kume Promise.all ile
+       bekleniyordu: kumedeki EN YAVAS blok bitene kadar bosta kalan
+       dort slot yeni is almiyordu.
+
+       Olculdu (Sile 4 km, onbellek sicak, 9 blok):
+         blok sureleri  192, 188, 185, 105, 104, 78, 77, 76, 40 ms
+         toplam is      1045 ms
+         kume ile gecen  481 ms
+       Ideal (5 slot dolu) max(1045/5, 192) = 209 ms. Fark tamamen
+       kumelerin bariyerinden geliyordu.
+
+       Havuzda her isci bitirince siradaki blogu aliyor, kimse
+       beklemiyor. Es zamanlilik yine Karolar.ESZAMANLI kadar —
+       Overpass'i dovmemek icin.
+       ------------------------------------------------------------ */
+    const kume = Math.min(Karolar.ESZAMANLI || 5, bloklar.length);
+    let siradaki = 0;
+    const isciler = [];
+    for (let w = 0; w < kume; w++) {
+      isciler.push((async () => {
+        for (;;) {
+          const i = siradaki++;
+          if (i >= bloklar.length) return;
+          await (async (g) => {
         /* Karo kumesini tek kutuya cevir */
         const kutula = (karolar) => {
           let mg = Infinity, mb = Infinity, mk = -Infinity, md = -Infinity;
@@ -847,8 +867,11 @@ const Touge = {
         }
         bitti++;
         if (ilerleme) ilerleme(bitti, bloklar.length, basarisiz);
-      }));
+          })(bloklar[i]);
+        }
+      })());
     }
+    await Promise.all(isciler);
 
     /* Bina kose ve merkezlerini kaynak bicimine cevir */
     const kose = [], merkez = [];

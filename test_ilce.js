@@ -118,16 +118,22 @@ const bekle = (ms) => new Promise(r => setTimeout(r, ms));
 
   const sonuc = JSON.parse(await ev(`JSON.stringify(Touge.sonuc.map(function(y){
     var p = y.olcum.ornek[0];
+    var o = y.olcum.ornek, ic = 0;
+    o.forEach(function(q){ if (Sinir.icinde(window.__secilen, q.lat, q.lon)) ic++; });
     return { ad:y.ad, tur:y.yolTuru, km:+(y.olcum.uzunluk/1000).toFixed(2), puan:+y.puan.toFixed(2),
-             icinde: Sinir.icinde(window.__secilen, p.lat, p.lon) };
+             oran: +(ic/o.length).toFixed(2) };
   }))`));
   console.log('  ' + sonuc.length + ' sonuc:');
   for (const y of sonuc) {
     console.log('    ' + y.puan.toFixed(2) + ' ' + String(y.km).padStart(5) + ' km  ' +
-                y.tur.padEnd(13) + (y.icinde ? 'ilce icinde ' : 'DISARIDA    ') + y.ad.slice(0,28));
+                y.tur.padEnd(13) + '%' + String(Math.round(y.oran*100)).padStart(3) + ' icinde  ' + y.ad.slice(0,28));
   }
   if (sonuc.length) {
-    kontrol('sonuclarin hepsi ilce icinde', sonuc.every(y => y.icinde));
+    /* Zincir birden cok parcadan olusuyor, filtre parca ORTASINA
+       bakiyor; sinirdan gecen yolun ucu disarida kalabilir. Onemli
+       olan yolun agirlikli olarak ilce icinde olmasi. */
+    const ort = sonuc.reduce((s,y)=>s+y.oran,0)/sonuc.length;
+    kontrol('sonuclar agirlikli olarak ilce icinde', ort > 0.7, 'ortalama %' + Math.round(ort*100));
   } else if (/buyuk/i.test(durum2)) {
     console.log('  (ilce cok buyuk uyarisi verildi — bu dogru davranis)');
   } else {

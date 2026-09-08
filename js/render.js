@@ -1425,20 +1425,19 @@ const Cizer = {
     c.lineCap = 'round';
 
     for (const o of ilceler) {
-      const vurgulu = (o === secili || o === uzerinde);
+      /* Seyreltilmis halkalar ve saklanmis yukseklikler. Bu satir
+         olmadan kare basina 26 bin arazi ornegi aliniyordu (33 ms);
+         hazirlik bir kez yapilip karede sadece yansitma kaliyor. */
+      Sinir.yukseklikTazele(o);
+
       c.beginPath();
-      for (const h of o.halkalar) {
-        let ox = 0, oy = 0, ilk = true;
+      for (const h of o.cizim) {
         for (let i = 0; i < h.length; i++) {
           const p = h[i];
           const m = Proj.metreye(p.lat, p.lon);
-          const e = Kamera.ekrana(m.x, m.y, Arazi.cz(Arazi.latLonYukseklik(p.lat, p.lon)));
-          /* Son nokta HER ZAMAN cizilir, yoksa halka kapanmaz. */
-          if (!ilk && i < h.length - 1 &&
-              Math.abs(e.sx - ox) < 3 && Math.abs(e.sy - oy) < 3) continue;
-          if (ilk) { c.moveTo(e.sx, e.sy); ilk = false; }
+          const e = Kamera.ekrana(m.x, m.y, Arazi.cz(p.z));
+          if (i === 0) c.moveTo(e.sx, e.sy);
           else c.lineTo(e.sx, e.sy);
-          ox = e.sx; oy = e.sy;
         }
         c.closePath();
       }

@@ -1064,6 +1064,7 @@ const Uyg = {
     this._ilceKameraYedek = null;
     this.ilceModu = false;
     Sinir.aktif = false;
+    Sinir.uzerinde = null;
     if (this.mod === 'ilce') this.mod = 'gez';
     this.ilceKatmanlariGeriAl();
     const b = document.getElementById('ilceBtn');
@@ -1106,6 +1107,7 @@ const Uyg = {
     this.ilceKatmanlariGeriAl();
     this.ilceModu = false;
     this.mod = 'gez';
+    Sinir.uzerinde = null;      // fare vurgusu kalmasin
     this._ilceKameraYedek = null;
     const ib = document.getElementById('ilceBtn');
     if (ib) ib.classList.remove('aktif');
@@ -1623,11 +1625,18 @@ const Uyg = {
 
       /* Ilce modunda farenin altindaki ilceyi vurgula ve adini yaz.
          Tiklamadan ONCE hangisini sectigini gormek sart: 21 ilce
-         yan yanayken renkler tek basina yetmiyor, kullanici
-         Buyukcekmece sanip Esenyurt'a tikliyordu.
-         Nokta-poligon testi 24 bin nokta uzerinde donuyor, her
-         fare hareketinde degil ~60 ms'de bir yapiliyor. */
-      if (Sinir.aktif && !this.surukluyor) {
+         yan yanayken renkler tek basina yetmiyor.
+
+         KOSUL ilceModu, Sinir.aktif DEGIL. Secimden sonra sinir
+         cizili kaliyor (hangi ilcede oldugun gorunsun) ama Sinir.aktif
+         bakilinca fare gezdikce hala ilceler parliyor ve durum
+         satirina "Esenyurt — tikla, burada arasin" yaziliyordu: hem
+         sonucun mesajini siliyor hem de "secme modundan cikmiyor,
+         alakasiz yer seciyor" gibi gorunuyordu.
+
+         Nokta-poligon testi 24 bin nokta uzerinde donuyor, her fare
+         hareketinde degil ~60 ms'de bir yapiliyor. */
+      if (this.ilceModu && !this.surukluyor) {
         const simdi = performance.now();
         if (simdi - (this._sinirYoklama || 0) > 60) {
           this._sinirYoklama = simdi;
