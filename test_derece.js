@@ -1,0 +1,82 @@
+/* Harf notu: esikler gercekten ayirt ediyor mu, listede/haritada
+   /balonda dogru gorunuyor mu? */
+const { spawn } = require('child_process');
+const EDGE = process.env.TARAYICI || 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe';
+const PORT = 9357;
+const bekle = (ms) => new Promise(r => setTimeout(r, ms));
+(async () => {
+  const c = spawn(EDGE, ['--headless=new','--disable-gpu','--hide-scrollbars',
+    '--remote-debugging-port='+PORT,'--user-data-dir='+process.env.TEMP+'/edge-e2e',
+    '--window-size=1400,900','about:blank'], {stdio:'ignore'});
+  let t=null;
+  for(let i=0;i<40;i++){await bekle(300); try{t=(await (await fetch('http://127.0.0.1:'+PORT+'/json/list')).json()).filter(x=>x.type==='page'); if(t.length)break;}catch(e){}}
+  const ws=new WebSocket(t[0].webSocketDebuggerUrl);
+  await new Promise((r,x)=>{ws.onopen=r;ws.onerror=x;});
+  let no=0; const bek=new Map();
+  ws.onmessage=(e)=>{const m=JSON.parse(e.data); if(m.id&&bek.has(m.id)){bek.get(m.id)(m);bek.delete(m.id);}};
+  const g=(me,pa)=>new Promise(z=>{const id=++no;bek.set(id,z);ws.send(JSON.stringify({id,method:me,params:pa||{}}));});
+  const ev=async(k)=>{const r=await g('Runtime.evaluate',{expression:k,awaitPromise:true,returnByValue:true});
+    if(r.result&&r.result.exceptionDetails) throw new Error(JSON.stringify(r.result.exceptionDetails.exception));
+    return r.result&&r.result.result?r.result.result.value:undefined;};
+  const hata=[]; const kontrol=(a,ok,ek)=>{console.log((ok?'  ok  ':'  X   ')+a+(ek?'   '+ek:'')); if(!ok)hata.push(a);};
+
+  await g('Page.enable'); await g('Runtime.enable');
+  await g('Page.navigate',{url:'http://localhost/kurye-harita/'});
+  for(let i=0;i<40;i++){await bekle(500); try{if(/complete.*kurye/.test(await ev('document.readyState+" "+location.pathname')))break;}catch(e){}}
+  for(let i=0;i<60;i++){ if((await ev('Touge.yollariTopla().length'))>300) break; await bekle(1000); }
+
+  console.log('=== esik tablosu ===');
+  const t2 = JSON.parse(await ev('JSON.stringify(Touge.DERECELER)'));
+  for (const d of t2) console.log('  ' + d.harf + '  >= ' + d.esik.toFixed(2) + '   ' + d.renk);
+
+  console.log('\n=== sinir degerleri dogru harfi veriyor mu ===');
+  const dn = JSON.parse(await ev('JSON.stringify([0.35,0.49,0.50,0.61,0.62,0.71,0.72,0.90].map(function(p){return {p:p, h:Touge.derece(p).harf};}))'));
+  for (const x of dn) console.log('    ' + x.p.toFixed(2) + ' -> ' + x.h);
+  const bekleniyor = { '0.35':'C','0.49':'C','0.5':'B','0.61':'B','0.62':'A','0.71':'A','0.72':'S','0.9':'S' };
+  kontrol('esikler dogru calisiyor', dn.every(x => bekleniyor[String(x.p)] === x.h),
+          dn.filter(x=>bekleniyor[String(x.p)]!==x.h).map(x=>x.p+'->'+x.h).join(', ') || 'hepsi dogru');
+
+  console.log('\n=== dort bolgede harf dagilimi ===');
+  const yerler = [[41.0011,28.6417,'Beylikduzu'],[41.1755,29.6122,'Sile'],
+                  [41.1830,28.9800,'Belgrad'],[41.1130,29.2280,'Polonezkoy']];
+  const toplam = {S:0,A:0,B:0,C:0};
+  for (const [la,lo,ad] of yerler) {
+    const r = JSON.parse(await ev([
+      '(async function(){',
+      '  var v = await Touge.bolgeVerisi(' + la + ',' + lo + ',4);',
+      '  if (v.hata) return JSON.stringify({hata:v.hata});',
+      '  var c = Touge.bul("ikisi", 9999, v.kaynak, {mahalleDahil:false});',
+      '  var s = {S:0,A:0,B:0,C:0};',
+      '  (c.sonuc||[]).forEach(function(y){ s[Touge.derece(y.puan).harf]++; });',
+      '  var ilk = (c.sonuc||[]).slice(0,3).map(function(y){',
+      '    return Touge.derece(y.puan).harf + " " + y.puan.toFixed(2); });',
+      '  return JSON.stringify({say:s, ilk:ilk});',
+      '})()'
+    ].join('\n')));
+    if (r.hata) { console.log('  ' + ad + ': ' + r.hata); continue; }
+    Object.keys(toplam).forEach(k => toplam[k] += r.say[k]);
+    console.log('  ' + ad.padEnd(12) + 'S:' + r.say.S + ' A:' + r.say.A + ' B:' + r.say.B + ' C:' + r.say.C +
+                '   ilk3: ' + r.ilk.join(', '));
+  }
+  const tp = toplam.S+toplam.A+toplam.B+toplam.C;
+  console.log('  TOPLAM      S:' + toplam.S + ' A:' + toplam.A + ' B:' + toplam.B + ' C:' + toplam.C + '  (' + tp + ' aday)');
+  kontrol('S nadir (%5 altinda)', toplam.S / tp < 0.05, '%' + (100*toplam.S/tp).toFixed(1));
+  kontrol('her harf kullaniliyor', toplam.A > 0 && toplam.B > 0 && toplam.C > 0);
+
+  console.log('\n=== panelde gorunuyor mu ===');
+  await ev('document.getElementById("tougeTur").value="viraj"; Uyg.tougeBul();');
+  for(let i=0;i<60;i++){ await bekle(1000); if (await ev('Touge.sonuc.length')) break; }
+  await bekle(1500);
+  const rozet = JSON.parse(await ev([
+    'JSON.stringify(Array.from(document.querySelectorAll("#tougeSonuc .derece")).map(function(e){',
+    '  return { harf: e.textContent, renk: e.style.color }; }))'
+  ].join('\n')));
+  console.log('  rozetler: ' + rozet.map(r=>r.harf).join(' '));
+  kontrol('her satirda harf rozeti var', rozet.length === (await ev('Touge.sonuc.length')),
+          rozet.length + '/' + (await ev('Touge.sonuc.length')));
+  kontrol('rozetler renkli', rozet.every(r => r.renk && r.renk !== ''), rozet[0] ? rozet[0].renk : '-');
+
+  ws.close(); c.kill();
+  console.log(hata.length ? '\nSONUC: '+hata.length+' hata' : '\nSONUC: hepsi gecti');
+  process.exit(hata.length?1:0);
+})().catch(e=>{console.log('COKTU: '+e.message);process.exit(1);});

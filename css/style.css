@@ -266,3 +266,12 @@ button[data-mod].aktif {
   color: var(--soluk); font-size: 13px; line-height: 1.4;
 }
 .balonKapat:hover { color: #f43f5e; }
+
+/* --- Harf notu (C / B / A / S) --- */
+.derece {
+  flex: 0 0 auto; min-width: 20px; text-align: center;
+  padding: 0 5px; border: 1px solid; border-radius: 3px;
+  font-size: 11px; font-weight: 700; letter-spacing: .3px;
+  background: rgba(0,0,0,0.35);
+}
+.balonDerece { margin-right: 6px; font-size: 12px; }

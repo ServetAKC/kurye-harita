@@ -123,6 +123,40 @@ const Touge = {
     return null;
   },
 
+  /* ============================================================
+     HARF NOTU
+     ------------------------------------------------------------
+     Esikler havadan atilmadi: dort bolgede (Beylikduzu, Sile,
+     Belgrad Ormani, Polonezkoy) 185 adayin puan dagilimi olculdu.
+
+       en dusuk 0.351   ortanca 0.465   %90 0.617
+       %95 0.673        %99 0.741       en yuksek 0.780
+
+     Esikler bu dilimlere oturtuldu, boylece harfler gercekten
+     ayirt ediyor:
+       S  >= 0.72   en ustteki ~%1     (nadir olmali, yoksa anlami yok)
+       A  >= 0.62   ustteki ~%10
+       B  >= 0.50   ustteki ~%35
+       C  <  0.50   geri kalani
+
+     RENKLER: C kirmizi, B sari, A yesil — kullanicinin istegi.
+     S icin renk secimi: kirmizi-sari-yesil dogal bir siralama, S'in
+     bunun DISINDA bir renk olmasi lazim yoksa "daha yesil" gibi
+     okunuyor. Fusya hem bu siradan kopuk hem de arayuzun camgobegi
+     vurgusuyla karismiyor (o renk "secili" demek).
+     ============================================================ */
+  DERECELER: [
+    { harf: 'S', esik: 0.72, renk: '#e879f9', soluk: 'rgba(232,121,249,0.55)' },
+    { harf: 'A', esik: 0.62, renk: '#4ade80', soluk: 'rgba(74,222,128,0.55)' },
+    { harf: 'B', esik: 0.50, renk: '#facc15', soluk: 'rgba(250,204,21,0.55)' },
+    { harf: 'C', esik: 0,    renk: '#f43f5e', soluk: 'rgba(244,63,94,0.55)' }
+  ],
+
+  derece(puan) {
+    for (const d of this.DERECELER) if (puan >= d.esik) return d;
+    return this.DERECELER[this.DERECELER.length - 1];
+  },
+
   sonuc: [],
   secili: null,
 

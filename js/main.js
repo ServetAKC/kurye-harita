@@ -1030,15 +1030,27 @@ const Uyg = {
       this.mod = 'ilce';
 
       /* Katman durumlarini yedekle: mod kapaninca kullanicinin
-         kendi ayarlari geri gelsin, hepsi acik kalmasin. */
+         kendi ayarlari geri gelsin, hepsi acik kalmasin.
+
+         ARAZI DE KAPANIYOR. Once sadece yol/bina/alan/durak
+         gizleniyordu ama arazi cizimi kare basina 21 ms — toplam
+         kare suresinin yarisi (olculdu). Ilce modunda tepeler ise
+         yaramiyor, okunacak sey ilce renkleri. Es yukselti egrileri
+         de ayni sebeple kapaniyor.
+
+         Arazi.etkin'e DOKUNULMUYOR, sadece cizim katmani: yukseklik
+         verisi sinir cizgilerinin araziye oturmasi icin hala lazim. */
       this._ilceKatmanYedek = {
         yollar: Cizer.katman.yollar, binalar: Cizer.katman.binalar,
-        alanlar: Cizer.katman.alanlar, poiler: Cizer.katman.poiler
+        alanlar: Cizer.katman.alanlar, poiler: Cizer.katman.poiler,
+        arazi: Cizer.katman.arazi, esYukselti: Cizer.katman.esYukselti
       };
       Cizer.katman.yollar = false;
       Cizer.katman.binalar = false;
       Cizer.katman.alanlar = false;
       Cizer.katman.poiler = false;
+      Cizer.katman.arazi = false;
+      Cizer.katman.esYukselti = false;
       Cizer.katmanDegisti();
       document.getElementById('ilceBtn').classList.add('aktif');
       document.getElementById('tuval').style.cursor = 'pointer';
@@ -1183,6 +1195,13 @@ const Uyg = {
       this.tougeYaz(c);
       /* Kamera zaten ilceye oturtuldu; sadece sec, ustune ucma. */
       this.tougeIlkiSec(c, false);
+
+      /* Tarama bitti: ILCE VURGUSU KALKSIN. Sinir boyasi secim
+         yaparken lazimdi, sonuclara bakarken haritayi ortuyor.
+         Sinir.secili duruyor — arama hala o ilceye kilitli ve
+         dugmede "... icinde ara" yaziyor; sadece cizim kapaniyor. */
+      Sinir.aktif = false;
+      Sinir.uzerinde = null;
       Cizer.kirlet();
       this.durum(ilce.ad + ' · ' + v.blok + ' blok' +
                  (Touge.sonElenenBlok ? ' (' + Touge.sonElenenBlok + ' blok ilce disinda, inmedi)' : '') + ' · ' +
@@ -1288,7 +1307,16 @@ const Uyg = {
       return d;
     };
 
-    ekle('balonBaslik', y.ad);
+    const drc = Touge.derece(y.puan);
+    const bas = ekle('balonBaslik', '');
+    const roz = document.createElement('b');
+    roz.className = 'derece balonDerece';
+    roz.textContent = drc.harf;
+    roz.style.color = drc.renk;
+    roz.style.borderColor = drc.renk;
+    roz.title = 'puan ' + y.puan.toFixed(3);
+    bas.appendChild(roz);
+    bas.appendChild(document.createTextNode(y.ad));
     ekle('balonAlt', y.yolTuru + ' · ' + km + ' km · puan ' + y.puan.toFixed(2));
 
     /* Virajli yolda viraj bilgisi one cikiyor, duzde duzluk. */
@@ -1391,9 +1419,16 @@ const Uyg = {
                 'bina ort. ' + Math.round(y.olcum.binaMesafe) + ' m · ' +
                 'bina dibi %' + Math.round(y.olcum.darlik * 100) +
                 (y.olcum.manzara > 0.05 ? ' · su %' + Math.round(y.olcum.manzara * 100) : '');
+      /* Puan yerine HARF NOTU. Ham puan (0.83 gibi) tek basina bir sey
+         soylemiyordu; harf bir bakista siralama veriyor. Ham puan
+         ipucunda duruyor. */
+      const drc = Touge.derece(y.puan);
       const p = document.createElement('b');
-      p.className = 'poiSayi';
-      p.textContent = y.puan.toFixed(2);
+      p.className = 'derece';
+      p.textContent = drc.harf;
+      p.style.color = drc.renk;
+      p.style.borderColor = drc.renk;
+      p.title = 'puan ' + y.puan.toFixed(3);
 
       /* Google Maps'te ac. Baglanti bir <a> cunku orta tikla / yeni
          sekmede ac gibi tarayici davranislari kendiliginden gelsin;
@@ -2025,9 +2060,10 @@ const Uyg = {
             const m = Proj.metreye(p.lat, p.lon);
             return { x: m.x, y: m.y, z: p.z };
           });
-          Cizer.rotaCiz(c, nokta,
-                        secili ? 'rgba(74,222,128,0.95)' : 'rgba(34,197,94,0.55)',
-                        secili ? 5 : 3);
+          /* Renk artik harf notundan: C kirmizi, B sari, A yesil,
+             S fusya. Secili olan tam doygun ve kalin. */
+          const d = Touge.derece(y.puan);
+          Cizer.rotaCiz(c, nokta, secili ? d.renk : d.soluk, secili ? 5 : 3);
         }
       }
 
