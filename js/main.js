@@ -861,7 +861,22 @@ const Uyg = {
       const p = document.createElement('b');
       p.className = 'poiSayi';
       p.textContent = y.puan.toFixed(2);
-      s.appendChild(n); s.appendChild(a); s.appendChild(p);
+
+      /* Google Maps'te ac. Baglanti bir <a> cunku orta tikla / yeni
+         sekmede ac gibi tarayici davranislari kendiliginden gelsin;
+         window.open ile bunlarin hepsi kaybolurdu. */
+      const g = document.createElement('a');
+      g.className = 'mapsBtn';
+      g.textContent = '↗';
+      g.href = Touge.mapsBaglantisi(y);
+      g.target = '_blank';
+      g.rel = 'noopener noreferrer';
+      g.title = 'Google Maps\'te yol tarifi olarak ac';
+      /* Satirin kendi tiklamasi haritada oraya ucuruyor; baglantiya
+         basildiginda o calismasin. */
+      g.onclick = (e) => e.stopPropagation();
+
+      s.appendChild(n); s.appendChild(a); s.appendChild(g); s.appendChild(p);
       s.onclick = () => {
         Touge.secili = y;
         const o = y.nokta[Math.floor(y.nokta.length / 2)];

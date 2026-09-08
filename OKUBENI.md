@@ -533,3 +533,29 @@ once oraya gidip verinin inmesini beklemek gerekiyor.
 Test: `node test_touge.js` — dort ayri bolgede tarayip "virajli denilen
 gercekten kivrimli mi, duz denilen gercekten duz mu, dar sokaklar elendi mi"
 diye olcuyor.
+
+### Google Maps'te ac
+
+Her sonucun yaninda **↗** dugmesi var: yolu Google Maps'te yol tarifi olarak
+aciyor. Telefonda Maps uygulamasini, masaustunde tarayiciyi acan universal
+URL bicimi kullaniliyor, ayri bag gerekmiyor.
+
+**Ara nokta sart.** Sadece baslangic ve bitis verilirse Google kendi tercih
+ettigi rotayi cizer — genelde otoyoldan dolasir, yani bulunan virajli yolu
+tamamen atlar. Ara noktalar rotayi bizim yolumuzdan gecmeye zorluyor.
+
+Google'in URL arayuzu en fazla 9 ara nokta aliyor; 8 kullanilip bir pay
+birakiliyor. Noktalar esit aralikli ORNEKLEME dizisinden aliniyor, ham OSM
+noktalarindan degil: ham noktalar yolun bir kisminda kumelenmis olabiliyor,
+o zaman ara noktalarin hepsi ayni bolgeye duserdi.
+
+Dugme `<a>` etiketi, `window.open` degil — orta tikla, "yeni sekmede ac" gibi
+tarayici davranislari kendiliginden gelsin diye. Satirin kendi tiklamasi
+haritada oraya ucuruyor; baglantiya basildiginda `stopPropagation` ile o
+calismiyor.
+
+Test: `node test_maps.js` — uretilen baglantiyi parcalayip kontrol ediyor:
+adres dogru mu, origin/destination yolun uclari mi, ara noktalar 9 sinirini
+asiyor mu, tekrar var mi, **ara noktalar gercekten yolun uzerinde mi** ve
+bastan sona SIRALI mi. Sile-Agva'da olculdu: ara noktalarin yoldan en buyuk
+sapmasi 0.1 m.

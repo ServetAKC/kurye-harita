@@ -604,5 +604,52 @@ const Touge = {
     };
   },
 
+  /* ============================================================
+     GOOGLE MAPS BAGLANTISI
+     ------------------------------------------------------------
+     Bulunan yolu Google Maps'te yol tarifi olarak acar.
+
+     ARA NOKTA SART. Sadece baslangic ve bitis verilirse Google
+     kendi tercih ettigi rotayi cizer — genelde otoyoldan dolasir,
+     yani bulunan virajli yolu tamamen atlar. Ara noktalar rotayi
+     bizim yolumuzdan gecmeye zorluyor.
+
+     Google'in URL arayuzu en fazla 9 ara nokta aliyor; 8 kullanip
+     bir pay birakiyoruz. Noktalar esit araliklarla secilmis
+     ornekleme dizisinden aliniyor, ham OSM noktalarindan degil:
+     ham noktalar yolun bir kisminda kumelenmis olabiliyor ve o
+     zaman ara noktalarin hepsi ayni bolgeye dusuyor.
+
+     Universal URL bicimi: telefonda Maps uygulamasini, masaustunde
+     tarayiciyi aciyor, ayri bag gerekmiyor.
+     ============================================================ */
+  ENCOK_ARA_NOKTA: 8,
+
+  mapsBaglantisi(y) {
+    const n = (y.olcum && y.olcum.ornek && y.olcum.ornek.length > 1)
+      ? y.olcum.ornek : y.nokta;
+    const yaz = (p) => p.lat.toFixed(6) + ',' + p.lon.toFixed(6);
+    const bas = yaz(n[0]);
+    const son = yaz(n[n.length - 1]);
+
+    const ara = [];
+    const adet = Math.min(this.ENCOK_ARA_NOKTA, Math.max(0, n.length - 2));
+    for (let i = 1; i <= adet; i++) {
+      const p = n[Math.round(i * (n.length - 1) / (adet + 1))];
+      if (!p) continue;
+      const s = yaz(p);
+      /* Kisa yolda ayni nokta iki kere secilebiliyor; tekrar eden
+         ara nokta Google'da "gecersiz rota" veriyor. */
+      if (s !== bas && s !== son && ara.indexOf(s) < 0) ara.push(s);
+    }
+
+    let u = 'https://www.google.com/maps/dir/?api=1' +
+            '&origin=' + encodeURIComponent(bas) +
+            '&destination=' + encodeURIComponent(son) +
+            '&travelmode=driving';
+    if (ara.length) u += '&waypoints=' + encodeURIComponent(ara.join('|'));
+    return u;
+  },
+
   temizle() { this.sonuc = []; this.secili = null; }
 };
