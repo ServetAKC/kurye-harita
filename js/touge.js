@@ -417,6 +417,18 @@ const Touge = {
       ekle(y.dugum[y.dugum.length - 1], y);
     }
 
+    /* ------------------------------------------------------------
+       "Ayni yol mu?" — isim varsa isim, yoksa sinif.
+       ------------------------------------------------------------
+       "Isimli bir yol KISA ISIMSIZ baglantiyla devam edebilir"
+       istisnasi denendi ve GERI ALINDI. Amac Kavakli Bulvari gibi
+       bolunmus bulvarlari birlestirmekti ama teshis gosterdi ki
+       sorun isimlendirme DEGIL: o parcalarin uclarinda "0 komsu"
+       var, yani orada biten baska bir yol yok. Birlesecek bir sey
+       olmadigi icin kural hicbir sey degistirmedi (zincirler yine
+       682/705/763/769 m kaldi) ve sadece "kisa bir kola sapma"
+       riski eklemis oldu.
+       ------------------------------------------------------------ */
     const ayniYol = (a, b) => {
       if (a.ad && b.ad) return a.ad === b.ad;
       if (a.ad || b.ad) return false;      // biri isimli biri degil: ayri yol
@@ -1210,6 +1222,12 @@ const Touge = {
 
   ayrinti(y) {
     if (y._ayrinti) return y._ayrinti;
+    /* Yukseklikler hazir olmadan egim hesaplanamaz. Cizim yolu
+       zaten cagiriyordu ama haritada bir yola tiklayip dogrudan
+       ayrinti isteyen yol cagirmiyordu: z tanimsiz kalinca egim
+       sacmaliyordu (olculdu: %58.6). Burada garanti altina
+       aliniyor. */
+    this.cizimeHazirla(y);
     const o = y.olcum.ornek;
     const n = o.length;
 
@@ -1370,5 +1388,93 @@ const Touge = {
     for (const p of y.olcum.ornek) p.z = Arazi.latLonYukseklik(p.lat, p.lon);
   },
 
-  temizle() { this.sonuc = []; this.secili = null; }
+  /* ============================================================
+     TEK BIR YOLU DEGERLENDIR
+     ------------------------------------------------------------
+     "Bu yolu neden secmedin?" sorusunun dogrudan cevabi. Listede
+     ilk 8 gorunuyor; 60. siradaki bir yol pratikte gorunmez oluyor
+     ve kullanicinin elinde "neden" sorusuna bakacak bir sey yok.
+
+     Artik haritada HERHANGI bir yola tiklanabiliyor: o yolun
+     zinciri kurulup olculuyor, uc tur icin de puanlanip en iyisi
+     gosteriliyor. Siralamayi bozmadan "bu yol ne aliyor" sorusu
+     cevaplaniyor.
+
+     Zincirler pahali (binlerce yol), o yuzden kaynak degismedikce
+     yeniden kurulmuyor.
+     ============================================================ */
+  _zincirOnbellek: null,
+  _zincirDamga: null,
+
+  zincirleriHazirla(kaynak, mahalleDahil) {
+    const damga = (kaynak.yollar.length + '/' + mahalleDahil + '/' + Karolar.surum);
+    if (this._zincirDamga === damga && this._zincirOnbellek) return this._zincirOnbellek;
+
+    const izgara = this.binaIzgarasi(kaynak.binalar.kose);
+    this.izbeG = this.izbeIzgarasi(kaynak.binalar.merkez);
+    this.yolG = this.yolIzgarasi(kaynak.yollar);
+    this.suIzgara = this.binaIzgarasi(kaynak.sular);
+
+    const gecis = new Map();
+    for (const y of kaynak.yollar) {
+      for (const n of y.dugum) gecis.set(n, (gecis.get(n) || 0) + 1);
+    }
+    const kavsakMi = (n) => (gecis.get(n) || 0) > 1;
+
+    this._zincirDamga = damga;
+    this._zincirOnbellek = {
+      zincirler: this.zincirle(kaynak.yollar, mahalleDahil),
+      izgara: izgara, kavsakMi: kavsakMi, rakimVar: !!Arazi.hazir
+    };
+    return this._zincirOnbellek;
+  },
+
+  /* Verilen cografi noktaya en yakin zinciri bul, olc, uc tur icin
+     puanla ve EN IYISINI dondur. Sonuc listedekiyle ayni bicimde
+     ki balon aynen calissin. */
+  yolDegerlendir(lat, lon, kaynak, mahalleDahil) {
+    kaynak = kaynak || this.kaynakTopla();
+    if (!kaynak.yollar.length) return null;
+    const h = this.zincirleriHazirla(kaynak, mahalleDahil);
+
+    /* En yakin zincir. Nokta-nokta bakiliyor; ornekleme 25 m
+       oldugu icin bu yeterince hassas. */
+    let enIyi = null, enU = 60;
+    for (const z of h.zincirler) {
+      for (const p of z.nokta) {
+        const d = Proj.mesafe(lat, lon, p.lat, p.lon);
+        if (d < enU) { enU = d; enIyi = z; }
+      }
+    }
+    if (!enIyi) return null;
+
+    const m = this.olc(enIyi, h.izgara, h.kavsakMi, h.rakimVar);
+    if (!m) return { ad: enIyi.ad || '(isimsiz ' + enIyi.tur + ')', yolTuru: enIyi.tur,
+                     sorun: enIyi.sorun, kisa: true };
+
+    let sec = null;
+    for (const t of ['viraj', 'duz', 'drag']) {
+      const p = this.puanla(m, t, h.rakimVar, enIyi);
+      if (!p) continue;
+      const d = this.derece(p.puan, t);
+      /* Turler arasi karsilastirma harf uzerinden: puanlar farkli
+         olceklerde, ham puanla kiyaslamak yanlis olurdu. */
+      const sira = { S: 3, A: 2, B: 1, C: 0 }[d.harf];
+      if (!sec || sira > sec._sira || (sira === sec._sira && p.puan > sec.puan)) {
+        sec = Object.assign({
+          tur: t, ad: enIyi.ad || '(isimsiz ' + enIyi.tur + ')', yolTuru: enIyi.tur,
+          genislik: enIyi.genislik, serit: enIyi.serit, parca: enIyi.parca,
+          nokta: enIyi.nokta, olcum: m, _sira: sira
+        }, p);
+      }
+    }
+    if (!sec) return { ad: enIyi.ad || '(isimsiz ' + enIyi.tur + ')', yolTuru: enIyi.tur,
+                       sorun: enIyi.sorun, olcum: m, puansiz: true };
+    return sec;
+  },
+
+  temizle() {
+    this.sonuc = []; this.secili = null;
+    this._zincirOnbellek = null; this._zincirDamga = null;
+  },
 };

@@ -1,4 +1,5 @@
-X/* 1) Kavakli Bulvari drag adaylari arasinda mi, kacinci sirada?
+/* Not: dosyanin basindaki bozukluk duzeltildi.
+   /* 1) Kavakli Bulvari drag adaylari arasinda mi, kacinci sirada?
    2) Drag puanlari virajli/duzden daha mi yuksek? Oyleyse S notu
       drag'de kolaylasir ve harfin anlami bozulur. */
 const { spawn } = require('child_process');

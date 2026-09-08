@@ -816,6 +816,7 @@ const Uyg = {
        cikmasi icin bir kare bekle, yoksa kullanici donmus saniyor. */
     setTimeout(() => {
       let c;
+      this._sonKaynak = null;       // ekranda yuklu olandan calis
       try { c = Touge.bul(tur, 8, null, { mahalleDahil: document.getElementById('tougeMahalle').checked }); }
       catch (e) { this.durum('Touge taramasi hata verdi: ' + e.message, 'hata'); return; }
 
@@ -889,6 +890,7 @@ const Uyg = {
       });
       if (v.hata) { this.durum(v.hata, 'uyari'); return; }
 
+      this._sonKaynak = v.kaynak;   // yola tiklama ayni veriye baksin
       const c = Touge.bul(tur, 8, v.kaynak,
         { mahalleDahil: document.getElementById('tougeMahalle').checked });
       if (c.hata) { this.durum(c.hata, 'uyari'); this.tougeYaz(null); return; }
@@ -1190,6 +1192,7 @@ const Uyg = {
         return Sinir.icinde(ilce, p.lat, p.lon);
       });
 
+      this._sonKaynak = v.kaynak;
       const c = Touge.bul(tur, 8, v.kaynak, { mahalleDahil: mahalleDahil });
       if (c.hata) { this.durum(c.hata, 'uyari'); this.tougeYaz(null); return; }
       this.tougeYaz(c);
@@ -1284,6 +1287,53 @@ const Uyg = {
     let t = ((px - ax) * dx + (py - ay) * dy) / uz2;
     t = Math.max(0, Math.min(1, t));
     return Math.hypot(px - (ax + dx * t), py - (ay + dy * t));
+  },
+
+  /* ------------------------------------------------------------
+     Haritada HERHANGI bir yola tiklama
+     ------------------------------------------------------------
+     Liste ilk 8'i gosteriyor; 60. siradaki bir yol pratikte
+     gorunmuyor ve kullanicinin "bu yolu neden secmedin" sorusuna
+     bakacak bir sey kalmiyor. Artik yola tiklayinca o yol yerinde
+     degerlendiriliyor: hangi ture giriyor, kac aliyor, olculeri ne.
+     Puanlanamiyorsa NEDEN puanlanamadigi yaziliyor.
+     ------------------------------------------------------------ */
+  yolaTikla(sx, sy) {
+    const w = Kamera.dunyayaArazi(sx, sy);
+    const cg = Proj.cografiye(w.x, w.y);
+    const mahalleDahil = document.getElementById('tougeMahalle').checked;
+
+    let y;
+    try {
+      y = Touge.yolDegerlendir(cg.lat, cg.lon, this._sonKaynak, mahalleDahil);
+    } catch (e) {
+      this.durum('Yol degerlendirilemedi: ' + e.message, 'hata');
+      return;
+    }
+    if (!y) { this.tougeBalonKapat(); return; }
+
+    if (y.kisa || y.puansiz) {
+      const m = y.olcum;
+      let sebep = y.sorun ? ('elendi: ' + y.sorun) : 'olcute uymuyor';
+      if (m) {
+        const p = [];
+        if (m.uzunluk < Touge.ENAZ_UZUNLUK_VIRAJ)
+          p.push(Math.round(m.uzunluk) + ' m (virajli icin en az ' + Touge.ENAZ_UZUNLUK_VIRAJ + ')');
+        if (m.enUzunDuz < Touge.ENAZ_DUZLUK)
+          p.push('icindeki duzluk ' + Math.round(m.enUzunDuz) + ' m (drag icin en az ' + Touge.ENAZ_DUZLUK + ')');
+        if (m.kivrim > Touge.ENCOK_KIVRIM) p.push('halka (kivrim ' + m.kivrim.toFixed(2) + ')');
+        if (m.darlik > Touge.ENCOK_DARLIK) p.push('bina dibi %' + Math.round(m.darlik * 100));
+        if (p.length) sebep = p.join(' · ');
+      }
+      this.durum(y.ad + ' [' + y.yolTuru + '] — ' + sebep, 'uyari');
+      this.tougeBalonKapat();
+      return;
+    }
+
+    /* Balon listedekiyle ayni bicimde; sonuc listeye EKLENMIYOR,
+       sadece gosteriliyor — siralama bozulmasin. */
+    Touge.cizimeHazirla(y);
+    this.tougeBalonAc(y, sx, sy);
   },
 
   tougeBalonKapat() {
@@ -1900,10 +1950,12 @@ const Uyg = {
        ayrinti balonu aciliyor. Balon aciksa ve bosluga tiklandiysa
        kapaniyor. Diger modlarin isleyisi degismiyor. */
     if (this.mod === 'gez') {
-      if (!Touge.sonuc.length) return;
-      const y = this.tougeVur(sx, sy);
-      if (y) this.tougeBalonAc(y, sx, sy);
-      else this.tougeBalonKapat();
+      /* Once sonuc cizgilerine bak (ince, toleransli). Vurmazsa
+         HERHANGI bir yolu degerlendir: "bu yolu neden secmedin"
+         sorusunun dogrudan cevabi. */
+      const y = Touge.sonuc.length ? this.tougeVur(sx, sy) : null;
+      if (y) { this.tougeBalonAc(y, sx, sy); return; }
+      this.yolaTikla(sx, sy);
       return;
     }
     this.tougeBalonKapat();
