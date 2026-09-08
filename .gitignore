@@ -7,3 +7,6 @@ teshis-*.json
 
 # elle alinmis yedekler
 *.yedek
+
+# uctan uca testin ekran goruntuleri
+ss/

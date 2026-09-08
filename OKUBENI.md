@@ -364,3 +364,30 @@ tasima yapilamiyor.
 
 Son uc onemli: bunlar sezgisel yontemler, en iyiyi garanti etmiyorlar. Kucuk
 musteri sayilarinda pratikte en iyiye cok yakin duruyorlar.
+
+---
+
+## Testler
+
+**`test_sira.js`** — teslimat sirasi, tarayicisiz. Yapay bir sehir kurup
+(ortasindan su gecen izgara) sirayi kaba kuvvetle karsilastiriyor ve eski
+yontemle olcusuyor. `node test_sira.js`
+
+**`test_e2e.js`** — gercek tarayicida, gercek Apache uzerinden, gercek OSM
+verisiyle. Edge'i headless acip CDP ile suruyor; ek paket gerekmiyor (Node 24'te
+`WebSocket` global). `node test_e2e.js`
+
+Kapsadigi: sayfa aciliyor mu, abartma varsayilani, koordinatla durak koyma,
+gecersiz giris (virgullu ondalik), rota ve teslimat sirasi, panel listesinin
+sirasi, kurye ilerlemesi, haritadan koordinat secme.
+
+Baska tarayici icin: `set TARAYICI=C:/.../chrome.exe && node test_e2e.js`
+
+**Kuryenin ilerlemesi neden elle sinaniyor?** Kurye `requestAnimationFrame`
+ile ilerliyor, headless tarayici ise rAF'i boguyor — ayni test bir kosumda
+"DONUYOR", otekinde "DURMUS" veriyor. Bu tarayici davranisi, uygulama hatasi
+degil. O yuzden test `kuryeIlerlet(1000)` ile bir saniyelik adimi elle atip
+mantigi sinar; rAF'in durumu bilgi olarak yazilir.
+
+Olculdu (8 Eylul 2026, Beylikduzu, 4 musteri, kapasite 3):
+`4 teslimat · 2 sefer · 8948 m · 52403 dugumluk grafikte 67 ms (matris 58 ms)`
