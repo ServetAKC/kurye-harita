@@ -213,3 +213,9 @@ button[data-mod].aktif {
 
 #tougeYerOneri { max-height: 130px; overflow-y: auto; }
 #tougeKm { width: 52px; }
+
+/* --- Yer sec (ilce) modu --- */
+#ilceBtn { flex: 1; }
+#ilceBtn.aktif {
+  border-color: var(--vurgu); color: var(--vurgu); background: #10222c;
+}

@@ -899,6 +899,131 @@ const Uyg = {
     }
   },
 
+  /* ============================================================
+     YER SEC — ilceleri boyayip tiklamayla secme
+     ------------------------------------------------------------
+     Ad yazip aramak yerine haritadan secmek. Mod acikken yollar,
+     binalar, alanlar ve duraklar gizleniyor: ilce renkleri ve
+     sinirlar tek basina kalsin, hangi ilcenin nerede bittigi
+     karismasin.
+     ============================================================ */
+  ilceModu: false,
+  _ilceKatmanYedek: null,
+
+  async ilceModuAc() {
+    if (this.ilceModu) { this.ilceModuKapat(); return; }
+
+    if (Sinir.yukleniyor) return;
+    Sinir.yukleniyor = true;
+    this.durum('Ilce sinirlari iniyor...');
+    try {
+      /* Ekranda gorunen bolgenin ilceleri. Sinirlar buyuk oldugu
+         icin kutu biraz genisletiliyor: yarisi ekran disinda kalan
+         bir ilce hic gorunmezse tiklanamaz. */
+      const gb = Cizer.gorunenBolge(0);
+      const pay = Math.max(gb.maxx - gb.minx, gb.maxy - gb.miny) * 0.25;
+      const g1 = Proj.cografiye(gb.minx - pay, gb.miny - pay);
+      const g2 = Proj.cografiye(gb.maxx + pay, gb.maxy + pay);
+      const kutu = [Math.min(g1.lat, g2.lat), Math.min(g1.lon, g2.lon),
+                    Math.max(g1.lat, g2.lat), Math.max(g1.lon, g2.lon)];
+      const liste = await Sinir.indir(kutu);
+      if (!liste.length) {
+        this.durum('Bu gorunumde ilce siniri bulunamadi — biraz uzaklas.', 'uyari');
+        return;
+      }
+      this.ilceModu = true;
+      Sinir.aktif = true;
+      this.mod = 'ilce';
+
+      /* Katman durumlarini yedekle: mod kapaninca kullanicinin
+         kendi ayarlari geri gelsin, hepsi acik kalmasin. */
+      this._ilceKatmanYedek = {
+        yollar: Cizer.katman.yollar, binalar: Cizer.katman.binalar,
+        alanlar: Cizer.katman.alanlar, poiler: Cizer.katman.poiler
+      };
+      Cizer.katman.yollar = false;
+      Cizer.katman.binalar = false;
+      Cizer.katman.alanlar = false;
+      Cizer.katman.poiler = false;
+      Cizer.katmanDegisti();
+      document.getElementById('ilceBtn').classList.add('aktif');
+      document.getElementById('tuval').style.cursor = 'pointer';
+      this.durum(liste.length + ' ilce — birine tikla, orada arasin.', 'iyi');
+    } catch (e) {
+      this.durum('Ilce sinirlari inmedi: ' + e.message, 'hata');
+    } finally {
+      Sinir.yukleniyor = false;
+    }
+  },
+
+  ilceModuKapat() {
+    this.ilceModu = false;
+    Sinir.aktif = false;
+    if (this.mod === 'ilce') this.mod = 'gez';
+    if (this._ilceKatmanYedek) {
+      Object.assign(Cizer.katman, this._ilceKatmanYedek);
+      this._ilceKatmanYedek = null;
+      Cizer.katmanDegisti();
+    }
+    const b = document.getElementById('ilceBtn');
+    if (b) b.classList.remove('aktif');
+    document.getElementById('tuval').style.cursor = '';
+    Cizer.kirlet();
+  },
+
+  /* Tiklanan ilcede tara. Ilcenin kendi kutusu kullaniliyor;
+     yaricap kutusu burada gecersiz. */
+  async ilcedeAra(ilce) {
+    Sinir.secili = ilce;
+    Cizer.kirlet();
+    const tur = document.getElementById('tougeTur').value;
+    const mahalleDahil = document.getElementById('tougeMahalle').checked;
+
+    /* Ilcenin kosegeninin yarisi = kapsayan daire yaricapi. Ilce
+       kare degil ama blok izgarasi zaten kutuya gore kuruluyor. */
+    const kt = ilce.kutu;
+    const enM = Proj.mesafe(kt.g, kt.b, kt.g, kt.d) / 2;
+    const boyM = Proj.mesafe(kt.g, kt.b, kt.k, kt.b) / 2;
+    const km = Math.max(enM, boyM) / 1000;
+
+    this.gitKonuma(ilce.merkez.lat, ilce.merkez.lon, Math.max(Kamera.olcek, 0.3));
+    this.durum(ilce.ad + ' · ' + km.toFixed(1) + ' km · veri iniyor...');
+
+    try {
+      const v = await Touge.bolgeVerisi(ilce.merkez.lat, ilce.merkez.lon, km,
+        (bitti, toplam, kotu) => {
+          this.durum(ilce.ad + ' · blok ' + bitti + '/' + toplam +
+                     (kotu ? ' (' + kotu + ' inmedi)' : ''));
+        });
+      if (v.hata) {
+        this.durum(ilce.ad + ': ' + v.hata + ' Ilce cok buyuk — yer kutusuna ' +
+                   'bir mahalle yazip yaricapla ara.', 'uyari');
+        return;
+      }
+
+      /* Kutu ilceden buyuk: kosede komsu ilcenin yollari da geliyor.
+         Yolun ORTA noktasi ilcenin icinde degilse atiliyor — bastan
+         ya da sondan bakmak sinirdan gecen yollarda yaniltir. */
+      const oncesi = v.kaynak.yollar.length;
+      v.kaynak.yollar = v.kaynak.yollar.filter((y) => {
+        const p = y.nokta[Math.floor(y.nokta.length / 2)];
+        return Sinir.icinde(ilce, p.lat, p.lon);
+      });
+
+      const c = Touge.bul(tur, 8, v.kaynak, { mahalleDahil: mahalleDahil });
+      if (c.hata) { this.durum(c.hata, 'uyari'); this.tougeYaz(null); return; }
+      this.tougeYaz(c);
+      Cizer.kirlet();
+      this.durum(ilce.ad + ' · ' + v.blok + ' blok · ' +
+                 v.kaynak.yollar.length + '/' + oncesi + ' yol ilce icinde · ' +
+                 c.toplam + ' aday' + this.tougeEleme(c) + c.ms.toFixed(0) + ' ms' +
+                 (v.basarisiz ? '  ·  ' + v.basarisiz + ' blok inmedi' : ''),
+                 c.sonuc.length ? 'iyi' : 'uyari');
+    } catch (e) {
+      this.durum('Ilce taramasi hata verdi: ' + e.message, 'hata');
+    }
+  },
+
   /* Eleme kirilimi: kullanici NEYIN elendigini gorsun. Yoksa
      "burada iyi yol yok" ile "filtre fazla sert" ayirt edilemiyor. */
   tougeEleme(c) {
@@ -1077,12 +1202,15 @@ const Uyg = {
 
     document.getElementById('tougeBtn').onclick = () => this.tougeBul();
     document.getElementById('tougeYerBtn').onclick = () => this.tougeYerdeAra();
+    document.getElementById('ilceBtn').onclick = () => this.ilceModuAc();
     document.getElementById('tougeYer').onkeydown = (e) => {
       if (e.key === 'Enter') { e.preventDefault(); this.tougeYerdeAra(); }
     };
     document.getElementById('tougeTemizle').onclick = () => {
-      Touge.temizle(); this.tougeYaz(null); Cizer.kirlet();
+      Touge.temizle(); this.tougeYaz(null);
+      Sinir.temizle(); this.ilceModuKapat();
       document.getElementById('tougeYerOneri').innerHTML = '';
+      Cizer.kirlet();
       this.durum('Touge sonuclari silindi.');
     };
 
@@ -1245,6 +1373,14 @@ const Uyg = {
        nereye koyacagini biliyorsan yazarsin, haritada gosterecegin bir
        yerse tiklarsin. Grafik hazir olmasi gerekmiyor, cunku yola
        oturtma "Sube yap"/"Musteri ekle" aninda yapiliyor. */
+    if (this.mod === 'ilce') {
+      const cg = Proj.cografiye(w.x, w.y);
+      const o = Sinir.noktadakiIlce(cg.lat, cg.lon);
+      if (!o) { this.durum('Orada ilce yok — sinirlarin icine tikla.', 'uyari'); return; }
+      this.ilcedeAra(o);
+      return;
+    }
+
     if (this.mod === 'koordinat') {
       const c = Proj.cografiye(w.x, w.y);
       const kutu = document.getElementById('konumKutu');
@@ -1361,7 +1497,9 @@ const Uyg = {
     }
 
     Cizer.ciz((c) => {
-      /* Touge vurgusu EN ALTTA: rota ve duraklar onun ustunde kalsin.
+      if (Sinir.aktif) Cizer.ilcelerCiz(c, Sinir.ilceler, Sinir.secili, null);
+
+      /* Touge vurgusu: rota ve duraklar onun ustunde kalsin.
          Secili olan daha parlak ve kalin — listede tiklanan hangisi
          oldugu haritada anlasilsin. */
       if (Touge.sonuc.length) {

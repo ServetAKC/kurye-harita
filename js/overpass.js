@@ -224,8 +224,13 @@ const Overpass = {
 
   /* Tek bir karoyu indir. Karo sinirlari [guney,bati,kuzey,dogu].
      iptal: AbortSignal — kullanici baska yere kaydirinca istek iptal edilir. */
-  async indirKutu(kutu, detayAdi, poiAcik) {
-    const sorgu = this.sorguYaz(kutu, detayAdi, poiAcik);
+  /* hamSorgu verilirse sorguYaz atlanir. Onbellek, vekil ve ayna
+     mantiginin tamami aynen isliyor (onbellek anahtari zaten sorgu
+     metninin ozeti). Ilce sinirlari boyle cekiliyor — bunun icin
+     ayri bir indirme yolu yazmak ayni mantigin ikinci kopyasi
+     olurdu. */
+  async indirKutu(kutu, detayAdi, poiAcik, hamSorgu) {
+    const sorgu = hamSorgu || this.sorguYaz(kutu, detayAdi, poiAcik);
     let sonHata = null;
 
     /* Once KALICI ONBELLEK: ayni sorgu daha once indiyse ag'a hic cikma.

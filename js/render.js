@@ -219,6 +219,8 @@ const Cizer = {
 
   katman: {
     arazi: true,
+    yollar: true,     /* "Yer sec" modunda kapaniyor: ilce renkleri gorunsun */
+    poiler: true,
     esYukselti: true,
     kiyi: true,
     alanlar: true,
@@ -532,7 +534,7 @@ const Cizer = {
     if (this.katman.kiyi) this.kiyiCiz(c, t.kiyi);
     if (this.katman.alanlar) this.alanlarCiz(c, t.alanlar);
     const s2 = performance.now();
-    this.yollarCiz(c, t.yollar, kaba);
+    if (this.katman.yollar) this.yollarCiz(c, t.yollar, kaba);
     const s3 = performance.now();
     /* Olcek esigi BURADA da kontrol ediliyor: sekilleriTopla onbellekli ve
        yeni seviyenin karolari daha inmemisken eski (binali) liste elde
@@ -541,7 +543,7 @@ const Cizer = {
     if (this.katman.binalar && t.binalar.length && Kamera.olcek >= this.BINA_ENAZ_OLCEK)
       this.binalarCiz(c, t.binalar, kaba);
     const s4 = performance.now();
-    if (!kaba) this.poilerCiz(c, t.poiler);
+    if (!kaba && this.katman.poiler) this.poilerCiz(c, t.poiler);
     if (this.katman.grafikDugum) this.dugumlerCiz(c);
     if (this.katman.yolAdlari && !kaba) this.yolAdlariCiz(c, t.yollar);
     const s5 = performance.now();
@@ -1401,6 +1403,71 @@ const Cizer = {
       c.fillText(etiket, tepe.sx, tepe.sy - 13);
       c.textAlign = 'left';
     }
+  },
+
+  /* ------------------------------------------------------------
+     ILCE SINIRLARI
+     ------------------------------------------------------------
+     Canli katmanda ciziliyor, duragan tamponda degil: secim ve
+     farenin uzerinde oldugu ilce degistikce renk degisiyor,
+     tamponu her seferinde yeniden cizmek gereksiz olurdu.
+
+     Halkalar SEYRELTILIYOR. Bir ilce siniri binlerce nokta
+     tasiyabiliyor ve her nokta icin arazi yuksekligi ornekleyip
+     izometrik yansitma yapmak kare basina onlarca ms yiyor.
+     Ekranda 3 pikselden yakin duran ardisik noktalar atlaniyor;
+     cizgi gozle ayni gorunuyor.
+     ------------------------------------------------------------ */
+  ilcelerCiz(c, ilceler, secili, uzerinde) {
+    if (!ilceler || !ilceler.length) return;
+    c.save();
+    c.lineJoin = 'round';
+    c.lineCap = 'round';
+
+    for (const o of ilceler) {
+      const vurgulu = (o === secili || o === uzerinde);
+      c.beginPath();
+      for (const h of o.halkalar) {
+        let ox = 0, oy = 0, ilk = true;
+        for (let i = 0; i < h.length; i++) {
+          const p = h[i];
+          const m = Proj.metreye(p.lat, p.lon);
+          const e = Kamera.ekrana(m.x, m.y, Arazi.cz(Arazi.latLonYukseklik(p.lat, p.lon)));
+          /* Son nokta HER ZAMAN cizilir, yoksa halka kapanmaz. */
+          if (!ilk && i < h.length - 1 &&
+              Math.abs(e.sx - ox) < 3 && Math.abs(e.sy - oy) < 3) continue;
+          if (ilk) { c.moveTo(e.sx, e.sy); ilk = false; }
+          else c.lineTo(e.sx, e.sy);
+          ox = e.sx; oy = e.sy;
+        }
+        c.closePath();
+      }
+      c.fillStyle = vurgulu ? o.renk.secili : o.renk.dolgu;
+      c.fill('evenodd');
+      c.strokeStyle = o.renk.cizgi;
+      c.lineWidth = vurgulu ? 3 : 1.6;
+      c.stroke();
+    }
+
+    /* Adlar ayri gecişte ve en ustte: sinir cizgileri yazinin
+       uzerine binmesin. */
+    c.font = 'bold 12px system-ui, sans-serif';
+    c.textAlign = 'center';
+    c.textBaseline = 'middle';
+    for (const o of ilceler) {
+      const m = Proj.metreye(o.merkez.lat, o.merkez.lon);
+      const e = Kamera.ekrana(m.x, m.y, Arazi.cz(Arazi.latLonYukseklik(o.merkez.lat, o.merkez.lon)));
+      if (e.sx < -60 || e.sy < -20 ||
+          e.sx > Kamera.genislik + 60 || e.sy > Kamera.yukseklik + 20) continue;
+      c.lineWidth = 3;
+      c.strokeStyle = 'rgba(2,8,14,0.85)';
+      c.strokeText(o.ad, e.sx, e.sy);
+      c.fillStyle = (o === secili || o === uzerinde) ? '#ffffff' : '#cbd5e1';
+      c.fillText(o.ad, e.sx, e.sy);
+    }
+    c.textAlign = 'left';
+    c.textBaseline = 'alphabetic';
+    c.restore();
   },
 
   rotaCiz(c, noktalar, renk, kalinlik) {
